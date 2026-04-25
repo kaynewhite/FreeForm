@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Freeform Mana</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="brand">
+      <span class="brand-mark">FM</span>
+      <h1>Freeform Mana</h1>
+      <p class="tagline">A sandbox where every cast costs something.</p>
+    </header>
+
+    <section class="card" id="auth-card">
+      <div class="tabs" role="tablist">
+        <button class="tab is-active" data-tab="login" role="tab" aria-selected="true">Log in</button>
+        <button class="tab" data-tab="register" role="tab" aria-selected="false">Create account</button>
+      </div>
+
+      <form id="login-form" class="form is-active" novalidate>
+        <label>
+          <span>Email or username</span>
+          <input type="text" name="identifier" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button class="primary" type="submit">Log in</button>
+        <p class="form-msg" data-role="msg"></p>
+      </form>
+
+      <form id="register-form" class="form" novalidate>
+        <label>
+          <span>Email</span>
+          <input type="email" name="email" autocomplete="email" required />
+        </label>
+        <label>
+          <span>Username</span>
+          <input type="text" name="username" autocomplete="username" minlength="3" maxlength="32" required />
+          <small>3-32 chars: letters, numbers, underscore.</small>
+        </label>
+        <label>
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="new-password" minlength="8" required />
+          <small>8 characters minimum.</small>
+        </label>
+        <button class="primary" type="submit">Create account</button>
+        <p class="form-msg" data-role="msg"></p>
+      </form>
+    </section>
+
+    <section class="card" id="home-card" hidden>
+      <h2 id="home-greeting">Welcome.</h2>
+      <p>You're signed in. Character creation and the world come next — for now this just proves the auth loop works.</p>
+      <dl class="meta">
+        <div><dt>Username</dt><dd id="me-username">—</dd></div>
+        <div><dt>Email</dt><dd id="me-email">—</dd></div>
+        <div><dt>Joined</dt><dd id="me-joined">—</dd></div>
+      </dl>
+      <button class="ghost" id="logout-btn" type="button">Log out</button>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
