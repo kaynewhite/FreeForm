@@ -4,65 +4,148 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Freeform Mana</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <div class="bg-vignette"></div>
+  <div class="bg-embers" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+
   <main class="shell">
     <header class="brand">
-      <span class="brand-mark">FM</span>
+      <div class="sigil" aria-hidden="true">
+        <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="sigilCore" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#cfe2ff" stop-opacity="1"/>
+              <stop offset="55%" stop-color="#5b8cff" stop-opacity="0.85"/>
+              <stop offset="100%" stop-color="#1a1f3a" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="sigilGold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#f6e4a3"/>
+              <stop offset="50%" stop-color="#caa24a"/>
+              <stop offset="100%" stop-color="#7a5a1f"/>
+            </linearGradient>
+          </defs>
+          <g class="sigil-rotate">
+            <circle cx="60" cy="60" r="54" fill="none" stroke="url(#sigilGold)" stroke-width="1.4" opacity="0.85"/>
+            <circle cx="60" cy="60" r="46" fill="none" stroke="url(#sigilGold)" stroke-width="0.8" opacity="0.6" stroke-dasharray="2 4"/>
+            <g stroke="url(#sigilGold)" stroke-width="1" opacity="0.75">
+              <path d="M60 6 L60 22"/>
+              <path d="M60 98 L60 114"/>
+              <path d="M6 60 L22 60"/>
+              <path d="M98 60 L114 60"/>
+              <path d="M22 22 L34 34"/>
+              <path d="M86 86 L98 98"/>
+              <path d="M98 22 L86 34"/>
+              <path d="M22 98 L34 86"/>
+            </g>
+            <polygon points="60,30 78,60 60,90 42,60" fill="none" stroke="url(#sigilGold)" stroke-width="1.2" opacity="0.85"/>
+            <polygon points="60,38 72,60 60,82 48,60" fill="none" stroke="#cfe2ff" stroke-width="0.7" opacity="0.6"/>
+          </g>
+          <circle cx="60" cy="60" r="14" fill="url(#sigilCore)"/>
+          <circle cx="60" cy="60" r="3" fill="#eaf2ff"/>
+        </svg>
+      </div>
       <h1>Freeform Mana</h1>
-      <p class="tagline">A sandbox where every cast costs something.</p>
+      <p class="tagline">Where every cast costs something — and death is forever.</p>
     </header>
 
-    <section class="card" id="auth-card">
+    <section class="tome" id="auth-card">
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+
       <div class="tabs" role="tablist">
-        <button class="tab is-active" data-tab="login" role="tab" aria-selected="true">Log in</button>
-        <button class="tab" data-tab="register" role="tab" aria-selected="false">Create account</button>
+        <button class="tab is-active" data-tab="login" role="tab" aria-selected="true">
+          <span class="tab-label">Enter the Realm</span>
+        </button>
+        <button class="tab" data-tab="register" role="tab" aria-selected="false">
+          <span class="tab-label">Forge a Soul</span>
+        </button>
+      </div>
+
+      <div class="rune-divider" aria-hidden="true">
+        <span class="rune">✦</span>
+        <span class="line"></span>
+        <span class="rune">❖</span>
+        <span class="line"></span>
+        <span class="rune">✦</span>
       </div>
 
       <form id="login-form" class="form is-active" novalidate>
         <label>
-          <span>Email or username</span>
-          <input type="text" name="identifier" autocomplete="username" required />
+          <span>Name or Sigil-mark</span>
+          <input type="text" name="identifier" autocomplete="username" required placeholder="email or username" />
         </label>
         <label>
-          <span>Password</span>
-          <input type="password" name="password" autocomplete="current-password" required />
+          <span>Secret Word</span>
+          <input type="password" name="password" autocomplete="current-password" required placeholder="••••••••" />
         </label>
-        <button class="primary" type="submit">Log in</button>
+        <button class="primary" type="submit">
+          <span class="btn-flame"></span>
+          <span class="btn-text">Step Through the Veil</span>
+        </button>
         <p class="form-msg" data-role="msg"></p>
       </form>
 
       <form id="register-form" class="form" novalidate>
         <label>
-          <span>Email</span>
-          <input type="email" name="email" autocomplete="email" required />
+          <span>Sigil-mark <em>(email)</em></span>
+          <input type="email" name="email" autocomplete="email" required placeholder="you@realm.world" />
         </label>
         <label>
-          <span>Username</span>
-          <input type="text" name="username" autocomplete="username" minlength="3" maxlength="32" required />
-          <small>3-32 chars: letters, numbers, underscore.</small>
+          <span>True Name <em>(username)</em></span>
+          <input type="text" name="username" autocomplete="username" minlength="3" maxlength="32" required placeholder="3-32 letters, numbers, or _" />
+          <small>Your name will be inscribed upon every cast — and upon the Board of Legends.</small>
         </label>
         <label>
-          <span>Password</span>
-          <input type="password" name="password" autocomplete="new-password" minlength="8" required />
-          <small>8 characters minimum.</small>
+          <span>Secret Word <em>(password)</em></span>
+          <input type="password" name="password" autocomplete="new-password" minlength="8" required placeholder="at least 8 characters" />
+          <small>Choose well. None — not even the gods — may recover it.</small>
         </label>
-        <button class="primary" type="submit">Create account</button>
+        <button class="primary" type="submit">
+          <span class="btn-flame"></span>
+          <span class="btn-text">Forge My Soul</span>
+        </button>
         <p class="form-msg" data-role="msg"></p>
       </form>
     </section>
 
-    <section class="card" id="home-card" hidden>
-      <h2 id="home-greeting">Welcome.</h2>
-      <p>You're signed in. Character creation and the world come next — for now this just proves the auth loop works.</p>
+    <section class="tome" id="home-card" hidden>
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+
+      <h2 id="home-greeting">Welcome, traveler.</h2>
+      <p class="home-flavor">The veil has parted. Soon you will choose a vessel — race, gender, and the spark of 500 mana that begins every legend.</p>
+
+      <div class="rune-divider" aria-hidden="true">
+        <span class="rune">✦</span>
+        <span class="line"></span>
+        <span class="rune">❖</span>
+        <span class="line"></span>
+        <span class="rune">✦</span>
+      </div>
+
       <dl class="meta">
-        <div><dt>Username</dt><dd id="me-username">—</dd></div>
-        <div><dt>Email</dt><dd id="me-email">—</dd></div>
-        <div><dt>Joined</dt><dd id="me-joined">—</dd></div>
+        <div><dt>True Name</dt><dd id="me-username">—</dd></div>
+        <div><dt>Sigil-mark</dt><dd id="me-email">—</dd></div>
+        <div><dt>Soul Forged</dt><dd id="me-joined">—</dd></div>
       </dl>
-      <button class="ghost" id="logout-btn" type="button">Log out</button>
+
+      <button class="ghost" id="logout-btn" type="button">Return to the Veil</button>
     </section>
+
+    <footer class="footnote">— Freeform Mana · v0.1 —</footer>
   </main>
 
   <script src="/app.js"></script>
