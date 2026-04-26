@@ -49,8 +49,7 @@
   function showHome(user) {
     authCard.hidden = true;
     homeCard.hidden = false;
-    $("#home-greeting").textContent = `Welcome, ${user.username}.`;
-    $("#me-username").textContent = user.username;
+    $("#home-greeting").textContent = "Welcome, traveler.";
     $("#me-email").textContent = user.email;
     $("#me-joined").textContent = user.created_at
       ? new Date(user.created_at).toLocaleString()

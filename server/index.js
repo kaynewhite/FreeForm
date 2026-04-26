@@ -55,8 +55,8 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
 
-app.get("/api/home", requireAuth, async (req, res) => {
-  res.json({ message: `Welcome back, ${req.session.username}.` });
+app.get("/api/home", requireAuth, async (_req, res) => {
+  res.json({ message: "Welcome back, traveler." });
 });
 
 const PUBLIC_DIR = path.join(__dirname, "..", "client");

@@ -81,8 +81,8 @@
 
       <form id="login-form" class="form is-active" novalidate>
         <label>
-          <span>Name or Sigil-mark</span>
-          <input type="text" name="identifier" autocomplete="username" required placeholder="email or username" />
+          <span>Sigil-mark <em>(email)</em></span>
+          <input type="email" name="email" autocomplete="email" required placeholder="you@realm.world" />
         </label>
         <label>
           <span>Secret Word</span>
@@ -99,10 +99,6 @@
         <label>
           <span>Sigil-mark <em>(email)</em></span>
           <input type="email" name="email" autocomplete="email" required placeholder="you@realm.world" />
-        </label>
-        <label>
-          <span>Username</span>
-          <input type="text" name="username" autocomplete="username" minlength="3" maxlength="32" required placeholder="3-32 letters, numbers, or _" />
         </label>
         <label>
           <span>Secret Word <em>(password)</em></span>
@@ -138,7 +134,6 @@
       </div>
 
       <dl class="meta">
-        <div><dt>True Name</dt><dd id="me-username">—</dd></div>
         <div><dt>Sigil-mark</dt><dd id="me-email">—</dd></div>
         <div><dt>Soul Forged</dt><dd id="me-joined">—</dd></div>
       </dl>
