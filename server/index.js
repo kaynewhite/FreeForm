@@ -8,6 +8,7 @@ const PgSession = require("connect-pg-simple")(session);
 
 const { pool } = require("./db");
 const { router: authRouter, requireAuth } = require("./auth");
+const charactersRouter = require("./characters");
 
 const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT) || 5000;
@@ -50,6 +51,7 @@ if (!IS_PROD) {
 }
 
 app.use("/api/auth", authRouter);
+app.use("/api/characters", charactersRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });

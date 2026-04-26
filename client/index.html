@@ -56,6 +56,14 @@
       <h1>FreeForm</h1>
     </header>
 
+    <!-- account strip: visible whenever a session exists -->
+    <div class="account-strip" id="account-strip" hidden>
+      <span class="account-email" id="account-email">—</span>
+      <span class="role-badge" id="role-badge" hidden></span>
+      <button class="link-btn" id="logout-btn" type="button">Return to the Veil</button>
+    </div>
+
+    <!-- AUTH -->
     <section class="tome" id="auth-card">
       <span class="corner tl"></span>
       <span class="corner tr"></span>
@@ -72,11 +80,7 @@
       </div>
 
       <div class="rune-divider" aria-hidden="true">
-        <span class="rune">✦</span>
-        <span class="line"></span>
-        <span class="rune">❖</span>
-        <span class="line"></span>
-        <span class="rune">✦</span>
+        <span class="rune">✦</span><span class="line"></span><span class="rune">❖</span><span class="line"></span><span class="rune">✦</span>
       </div>
 
       <form id="login-form" class="form is-active" novalidate>
@@ -113,32 +117,94 @@
       </form>
     </section>
 
-    <section class="tome" id="home-card" hidden>
+    <!-- FORGE A VESSEL -->
+    <section class="tome" id="forge-card" hidden>
       <span class="corner tl"></span>
       <span class="corner tr"></span>
       <span class="corner bl"></span>
       <span class="corner br"></span>
 
-      <div class="home-head">
-        <h2 id="home-greeting">Welcome, traveler.</h2>
-        <span id="role-badge" class="role-badge" hidden></span>
-      </div>
-      <p class="home-flavor">The veil has parted. Soon you will choose a vessel — race, gender, and the spark of 500 mana that begins every legend.</p>
+      <h2 class="card-title">Forge a Vessel</h2>
+      <p class="flavor">Choose your name and form. The fates will choose your blood.</p>
 
       <div class="rune-divider" aria-hidden="true">
-        <span class="rune">✦</span>
-        <span class="line"></span>
-        <span class="rune">❖</span>
-        <span class="line"></span>
-        <span class="rune">✦</span>
+        <span class="rune">✦</span><span class="line"></span><span class="rune">❖</span><span class="line"></span><span class="rune">✦</span>
       </div>
 
-      <dl class="meta">
-        <div><dt>Sigil-mark</dt><dd id="me-email">—</dd></div>
-        <div><dt>Soul Forged</dt><dd id="me-joined">—</dd></div>
-      </dl>
+      <form id="forge-form" novalidate>
+        <label>
+          <span>Vessel Name</span>
+          <input type="text" name="name" autocomplete="off" minlength="3" maxlength="24" required placeholder="e.g. Aelric, Kaida" />
+          <small>3-24 chars. Letters, numbers, spaces, _ ' or -. Must start with a letter.</small>
+        </label>
 
-      <button class="ghost" id="logout-btn" type="button">Return to the Veil</button>
+        <fieldset class="gender-pick" id="gender-pick">
+          <legend>Form</legend>
+          <label class="pick">
+            <input type="radio" name="gender" value="male" required />
+            <span>Male</span>
+          </label>
+          <label class="pick">
+            <input type="radio" name="gender" value="female" required />
+            <span>Female</span>
+          </label>
+        </fieldset>
+
+        <button class="primary" type="submit">
+          <span class="btn-flame"></span>
+          <span class="btn-text">Forge — Let the Fates Decide</span>
+        </button>
+        <p class="form-msg" data-role="msg"></p>
+
+        <div class="forge-rules">
+          <p><strong>Heed:</strong> race is rolled at the moment of forging — Human, Orc, Elf, Crystalline, or Voidborn, each at one chance in five. There are no rerolls. Your race is set until this vessel falls.</p>
+        </div>
+      </form>
+    </section>
+
+    <!-- CHARACTER SHEET -->
+    <section class="tome character-tome" id="character-card" hidden>
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+
+      <div class="char-head">
+        <h2 class="card-title" id="char-name">—</h2>
+        <span class="race-badge" id="char-race-badge">—</span>
+      </div>
+      <p class="char-sub"><span id="char-gender">—</span> · Forged <span id="char-forged">—</span></p>
+
+      <p class="char-passive" id="char-passive">—</p>
+
+      <div class="rune-divider" aria-hidden="true">
+        <span class="rune">✦</span><span class="line"></span><span class="rune">❖</span><span class="line"></span><span class="rune">✦</span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat"><dt>Health</dt><dd id="stat-hp">—</dd></div>
+        <div class="stat"><dt>Mana Cap</dt><dd id="stat-mana">—</dd></div>
+        <div class="stat"><dt>Level</dt><dd id="stat-level">—</dd></div>
+        <div class="stat"><dt>XP</dt><dd id="stat-xp">—</dd></div>
+        <div class="stat"><dt>Control</dt><dd id="stat-control">—</dd></div>
+        <div class="stat"><dt>Stamina</dt><dd id="stat-stamina">—</dd></div>
+        <div class="stat"><dt>Cast Speed</dt><dd id="stat-cast">—</dd></div>
+        <div class="stat"><dt>Efficiency</dt><dd id="stat-eff">—</dd></div>
+        <div class="stat"><dt>Resistance</dt><dd id="stat-res">—</dd></div>
+        <div class="stat"><dt>Weapon</dt><dd id="stat-weapon">—</dd></div>
+      </div>
+
+      <div class="char-actions">
+        <button class="primary" id="enter-btn" type="button" disabled title="The world is still being woven.">
+          <span class="btn-flame"></span>
+          <span class="btn-text">Enter the Realm</span>
+        </button>
+        <button class="ghost danger" id="slay-btn" type="button" title="Dev-only: trigger the permadeath flow.">
+          Slay (dev)
+        </button>
+      </div>
+      <p class="dev-note">The world is still being woven. Soon you may step in.</p>
+      <p class="form-msg" data-role="char-msg"></p>
     </section>
 
     <footer class="footnote">— FreeForm · v0.1 —</footer>
