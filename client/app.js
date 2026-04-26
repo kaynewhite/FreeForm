@@ -55,6 +55,21 @@
     $("#me-joined").textContent = user.created_at
       ? new Date(user.created_at).toLocaleString()
       : "—";
+
+    const badge = $("#role-badge");
+    const role = (user.role || "player").toLowerCase();
+    badge.classList.remove("is-admin", "is-operator");
+    if (role === "admin") {
+      badge.textContent = "Admin";
+      badge.classList.add("is-admin");
+      badge.hidden = false;
+    } else if (role === "operator") {
+      badge.textContent = "Operator";
+      badge.classList.add("is-operator");
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
   }
 
   loginForm.addEventListener("submit", async (e) => {

@@ -446,8 +446,15 @@ button.ghost:hover {
 .form-msg.is-good { color: var(--good); }
 
 /* logged-in card */
-#home-greeting {
+.home-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
   margin: 0 0 0.5rem;
+}
+#home-greeting {
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.55rem;
@@ -456,6 +463,34 @@ button.ghost:hover {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+.role-badge {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.55rem;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  background: rgba(0,0,0,0.35);
+  box-shadow: 0 0 12px rgba(0,0,0,0.5), inset 0 0 8px rgba(0,0,0,0.4);
+}
+.role-badge.is-admin {
+  color: #ffd1a4;
+  border-color: #d97a2a;
+  background:
+    linear-gradient(180deg, rgba(255,160,80,0.18), rgba(0,0,0,0.45));
+  box-shadow: 0 0 14px rgba(255,138,52,0.35), inset 0 0 10px rgba(0,0,0,0.45);
+  text-shadow: 0 0 8px rgba(255,170,90,0.55);
+}
+.role-badge.is-operator {
+  color: var(--arcane-1);
+  border-color: var(--arcane-3);
+  background:
+    linear-gradient(180deg, rgba(91,140,255,0.18), rgba(0,0,0,0.45));
+  box-shadow: 0 0 14px rgba(91,140,255,0.35), inset 0 0 10px rgba(0,0,0,0.45);
+  text-shadow: 0 0 8px rgba(207,226,255,0.55);
 }
 .home-flavor {
   margin: 0 0 0.5rem;

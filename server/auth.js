@@ -41,12 +41,13 @@ router.post("/register", async (req, res) => {
     const result = await query(
       `INSERT INTO users (email, username, password_hash)
        VALUES ($1, $2, $3)
-       RETURNING id, email, username, created_at`,
+       RETURNING id, email, username, role, created_at`,
       [email, username, hash]
     );
     const user = result.rows[0];
     req.session.userId = user.id;
     req.session.username = user.username;
+    req.session.role = user.role;
     return res.status(201).json({ user });
   } catch (e) {
     if (e.code === "23505") {
@@ -70,7 +71,7 @@ router.post("/login", async (req, res) => {
 
   try {
     const result = await query(
-      `SELECT id, email, username, password_hash
+      `SELECT id, email, username, password_hash, role
        FROM users
        WHERE email = $1 OR LOWER(username) = $1
        LIMIT 1`,
@@ -84,8 +85,9 @@ router.post("/login", async (req, res) => {
     await query(`UPDATE users SET last_login_at = NOW() WHERE id = $1`, [user.id]);
     req.session.userId = user.id;
     req.session.username = user.username;
+    req.session.role = user.role;
     return res.json({
-      user: { id: user.id, email: user.email, username: user.username },
+      user: { id: user.id, email: user.email, username: user.username, role: user.role },
     });
   } catch (e) {
     console.error("[auth] login error", e);
@@ -108,7 +110,7 @@ router.post("/logout", (req, res) => {
 router.get("/me", async (req, res) => {
   if (!req.session?.userId) return res.json({ user: null });
   const result = await query(
-    `SELECT id, email, username, created_at, last_login_at
+    `SELECT id, email, username, role, created_at, last_login_at
      FROM users WHERE id = $1`,
     [req.session.userId]
   );
