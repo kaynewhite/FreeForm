@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreeForm · Sprite Sandbox</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/sprites.css" />
+</head>
+<body class="sandbox-body">
+  <div class="bg-vignette"></div>
+
+  <main class="sandbox-shell">
+    <header class="sandbox-head">
+      <a href="/" class="back-link">← Back to character</a>
+      <h1>Sprite Sandbox <span class="sub">— Admin</span></h1>
+      <span class="role-badge is-admin">Admin Only</span>
+    </header>
+
+    <p class="sandbox-flavor">
+      Verify every uploaded admin sheet animates correctly. Pick a weapon
+      and an animation; tweak the frame count until each direction reads
+      cleanly. The frame count you settle on is what the in-world renderer
+      will use later.
+    </p>
+
+    <section class="sandbox-controls tome">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+
+      <div class="ctrl-row">
+        <label class="ctrl">
+          <span>Weapon</span>
+          <select id="weapon-select"></select>
+        </label>
+        <label class="ctrl">
+          <span>Animation</span>
+          <select id="anim-select"></select>
+        </label>
+        <label class="ctrl">
+          <span>Frames per direction</span>
+          <input id="frames-input" type="number" min="1" max="32" step="1" value="4" />
+        </label>
+        <label class="ctrl">
+          <span>FPS</span>
+          <input id="fps-input" type="number" min="1" max="60" step="1" value="8" />
+        </label>
+        <label class="ctrl">
+          <span>Scale</span>
+          <input id="scale-input" type="number" min="1" max="8" step="1" value="3" />
+        </label>
+        <label class="ctrl ctrl-toggle">
+          <input id="play-toggle" type="checkbox" checked />
+          <span>Playing</span>
+        </label>
+      </div>
+
+      <p class="ctrl-hint" id="layout-hint">—</p>
+    </section>
+
+    <section class="preview-grid" id="preview-grid">
+      <!-- One card per direction, populated by JS -->
+    </section>
+
+    <section class="sheet-raw tome">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+      <h2 class="card-title">Raw sheet</h2>
+      <p class="ctrl-hint" id="sheet-meta">—</p>
+      <div class="sheet-frame">
+        <img id="sheet-img" alt="" />
+        <canvas id="sheet-overlay"></canvas>
+      </div>
+    </section>
+
+    <p class="form-msg" id="status-msg"></p>
+  </main>
+
+  <script src="/sprites.js"></script>
+</body>
+</html>

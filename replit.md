@@ -17,6 +17,8 @@ working implementation. Currently only the auth slice is built.
 - `server/races.js` — race definitions and stat modifiers (Human, Orc, Elf, Crystalline, Voidborn)
 - `server/admin.js` — Admin character stat block per design doc §3.8 (no race/class)
 - `server/seed.js` — Idempotent admin user seed, runs on every boot. Configurable via `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars.
+- `server/sprites.js` — Admin-only `/api/sprites/manifest` endpoint. Walks `client/assets/sprites/admin/base/` and reports every sheet grouped by animation+weapon, marking each as per-direction or combined `UpLeftDownRight`.
+- `client/sprites.html` / `sprites.js` / `sprites.css` — Admin-only sandbox at `/sprites.html`. Renders 4 direction previews + a raw-sheet view with a frame grid overlay; user picks weapon, animation, frames-per-direction, FPS, and scale. Linked from the account strip when role=admin.
 - `client/` — static frontend (login, forge, character sheet)
 - `client/assets/sprites/admin/` — admin sprite sheets, organized by animation (idle/walk/attack/cast/death) and weapon variant (no-weapon + 13 weapon overlays)
 

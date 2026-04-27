@@ -45,6 +45,7 @@
     } else {
       badge.hidden = true;
     }
+    $("#sandbox-link").hidden = role !== "admin";
   }
 
   // ---- auth tabs / forms ----

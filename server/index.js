@@ -9,6 +9,7 @@ const PgSession = require("connect-pg-simple")(session);
 const { pool } = require("./db");
 const { router: authRouter, requireAuth } = require("./auth");
 const charactersRouter = require("./characters");
+const spritesRouter = require("./sprites");
 const { seedAdmin } = require("./seed");
 
 const HOST = "0.0.0.0";
@@ -51,8 +52,16 @@ if (!IS_PROD) {
   });
 }
 
+// Admin-only middleware: must be logged in AND have role=admin.
+function requireAdmin(req, res, next) {
+  if (!req.session?.userId) return res.status(401).json({ error: "Not authenticated" });
+  if (req.session.role !== "admin") return res.status(403).json({ error: "Admins only" });
+  next();
+}
+
 app.use("/api/auth", authRouter);
 app.use("/api/characters", charactersRouter);
+app.use("/api/sprites", requireAdmin, spritesRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
