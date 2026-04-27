@@ -11,6 +11,8 @@
     scale: 3,
     playing: true,
     activeIndex: 0, // which preview card the raw-sheet panel mirrors
+    rawZoom: 2,     // visual magnification of the raw sheet
+    drag: null,     // { x0, y0, x1, y1 } in image pixel space while dragging
   };
 
   // Sensible defaults for "frames per direction" by animation. The user can
@@ -40,8 +42,11 @@
   const previewGrid = $("#preview-grid");
   const sheetImg = $("#sheet-img");
   const sheetOverlay = $("#sheet-overlay");
+  const sheetStage = $("#sheet-stage");
   const sheetMeta = $("#sheet-meta");
   const statusMsg = $("#status-msg");
+  const rawZoom = $("#raw-zoom");
+  const applyAllBtn = $("#apply-all-btn");
 
   function setStatus(text, good = false) {
     statusMsg.textContent = text || "";
@@ -126,6 +131,30 @@
     for (const c of previewCards) sizePreviewCanvas(c);
   });
   playToggle.addEventListener("change", syncFromControls);
+
+  rawZoom.addEventListener("input", () => {
+    state.rawZoom = clamp(parseInt(rawZoom.value, 10) || 1, 1, 8);
+    applyRawZoom();
+  });
+
+  applyAllBtn.addEventListener("click", () => {
+    const src = previewCards[state.activeIndex];
+    if (!src || !src.sheet) return;
+    for (const c of previewCards) {
+      if (c === src || !c.sheet) continue;
+      c.frameW = src.frameW;
+      c.frameH = src.frameH;
+      c.offsetX = src.offsetX;
+      // Combined sheets: keep each row's Y; per-direction sheets: copy Y too.
+      if (c.sheet !== src.sheet) c.offsetY = src.offsetY;
+      c.frames = src.frames;
+      writeInputsFrom(c);
+      sizePreviewCanvas(c);
+      updateCardMeta(c);
+    }
+    setStatus("Applied slice to all directions.", true);
+    setTimeout(() => setStatus(""), 1800);
+  });
 
   function applyDefaultFrames() {
     framesInput.value = String(FRAME_DEFAULTS[state.animation] || 4);
@@ -397,15 +426,29 @@
     sheetImg.onload = () => {
       sheetOverlay.width = sheetImg.naturalWidth;
       sheetOverlay.height = sheetImg.naturalHeight;
-      sheetOverlay.style.width = `${sheetImg.naturalWidth}px`;
-      sheetOverlay.style.height = `${sheetImg.naturalHeight}px`;
-      sheetImg.style.width = `${sheetImg.naturalWidth}px`;
-      sheetImg.style.height = `${sheetImg.naturalHeight}px`;
-      sheetMeta.textContent =
-        `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
-        `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY}) · ${card.frames} frames`;
+      applyRawZoom();
+      updateRawMeta(card);
       drawSheetOverlay();
     };
+  }
+
+  function applyRawZoom() {
+    if (!sheetImg.naturalWidth) return;
+    const z = state.rawZoom;
+    const w = sheetImg.naturalWidth * z;
+    const h = sheetImg.naturalHeight * z;
+    sheetImg.style.width = `${w}px`;
+    sheetImg.style.height = `${h}px`;
+    sheetOverlay.style.width = `${w}px`;
+    sheetOverlay.style.height = `${h}px`;
+  }
+
+  function updateRawMeta(card) {
+    if (!card) return;
+    sheetMeta.textContent =
+      `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
+      `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY}) · ${card.frames} frames · ` +
+      `${state.rawZoom}× zoom`;
   }
 
   function drawSheetOverlay(frameIndex = 0) {
@@ -419,7 +462,7 @@
     ctx.clearRect(0, 0, w, h);
 
     // Faint frame grid for the active card's slice settings
-    ctx.strokeStyle = "rgba(246,228,163,0.35)";
+    ctx.strokeStyle = "rgba(246,228,163,0.45)";
     ctx.lineWidth = 1;
     for (let i = 0; i <= card.frames; i++) {
       const x = card.offsetX + i * card.frameW;
@@ -428,7 +471,6 @@
       ctx.lineTo(x + 0.5, card.offsetY + card.frameH);
       ctx.stroke();
     }
-    // Top + bottom rules
     ctx.beginPath();
     ctx.moveTo(card.offsetX, card.offsetY + 0.5);
     ctx.lineTo(card.offsetX + card.frames * card.frameW, card.offsetY + 0.5);
@@ -448,7 +490,82 @@
       card.frameW - 2,
       card.frameH - 2
     );
+
+    // Live drag rectangle + ghost preview of the N repeats stepping right
+    if (state.drag) {
+      const r = normalizeDrag(state.drag);
+      // Ghost copies of what the new slice would look like
+      ctx.strokeStyle = "rgba(140, 220, 255, 0.45)";
+      ctx.lineWidth = 1;
+      const repeats = card.frames;
+      for (let i = 0; i < repeats; i++) {
+        const x = r.x + i * r.w;
+        if (x + r.w > w) break;
+        ctx.strokeRect(x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      }
+      // The active drag rectangle, bright + dashed
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = "#7fdcff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+      ctx.setLineDash([]);
+    }
   }
+
+  function normalizeDrag(d) {
+    return {
+      x: Math.min(d.x0, d.x1),
+      y: Math.min(d.y0, d.y1),
+      w: Math.max(1, Math.abs(d.x1 - d.x0)),
+      h: Math.max(1, Math.abs(d.y1 - d.y0)),
+    };
+  }
+
+  // ----- drag-to-crop on the raw sheet -----
+  function eventToImagePx(e) {
+    const rect = sheetStage.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    const x = Math.max(0, Math.min(sheetImg.naturalWidth,
+      Math.round(cx / state.rawZoom)));
+    const y = Math.max(0, Math.min(sheetImg.naturalHeight,
+      Math.round(cy / state.rawZoom)));
+    return { x, y };
+  }
+
+  sheetStage.addEventListener("mousedown", (e) => {
+    if (!sheetImg.naturalWidth) return;
+    e.preventDefault();
+    const p = eventToImagePx(e);
+    state.drag = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    drawSheetOverlay();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!state.drag) return;
+    const p = eventToImagePx(e);
+    state.drag.x1 = p.x; state.drag.y1 = p.y;
+    const r = normalizeDrag(state.drag);
+    sheetMeta.textContent =
+      `dragging · slice would be ${r.w}×${r.h} @ (${r.x},${r.y}) · ${previewCards[state.activeIndex]?.frames || 0} frames`;
+    drawSheetOverlay();
+  });
+  window.addEventListener("mouseup", () => {
+    if (!state.drag) return;
+    const r = normalizeDrag(state.drag);
+    state.drag = null;
+    const card = previewCards[state.activeIndex];
+    if (card && r.w >= 2 && r.h >= 2) {
+      card.frameW = r.w;
+      card.frameH = r.h;
+      card.offsetX = r.x;
+      card.offsetY = r.y;
+      writeInputsFrom(card);
+      sizePreviewCanvas(card);
+      updateCardMeta(card);
+      updateRawMeta(card);
+    }
+    drawSheetOverlay();
+  });
 
   // ----- init -----
   applyDefaultFrames();

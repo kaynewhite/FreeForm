@@ -68,11 +68,24 @@
     <section class="sheet-raw tome">
       <span class="corner tl"></span><span class="corner tr"></span>
       <span class="corner bl"></span><span class="corner br"></span>
-      <h2 class="card-title">Raw sheet</h2>
+      <div class="raw-head">
+        <h2 class="card-title">Raw sheet · drag to crop the first frame</h2>
+        <div class="raw-tools">
+          <label class="ctrl">
+            <span>Zoom</span>
+            <input id="raw-zoom" type="range" min="1" max="8" step="1" value="2" />
+          </label>
+          <button id="apply-all-btn" class="link-btn" type="button">
+            Apply slice to all directions
+          </button>
+        </div>
+      </div>
       <p class="ctrl-hint" id="sheet-meta">—</p>
-      <div class="sheet-frame">
-        <img id="sheet-img" alt="" />
-        <canvas id="sheet-overlay"></canvas>
+      <div class="sheet-frame" id="sheet-frame">
+        <div class="sheet-stage" id="sheet-stage">
+          <img id="sheet-img" alt="" draggable="false" />
+          <canvas id="sheet-overlay"></canvas>
+        </div>
       </div>
     </section>
 

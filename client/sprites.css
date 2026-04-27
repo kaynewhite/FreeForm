@@ -225,6 +225,23 @@
   background: rgba(246,228,163,0.1);
 }
 
+.raw-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+.raw-head .card-title { margin: 0; }
+.raw-tools {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+.raw-tools .ctrl span { font-size: 0.65rem; }
+.raw-tools input[type="range"] { width: 8rem; accent-color: #d9a64a; }
+
 .sheet-frame {
   margin-top: 0.6rem;
   padding: 0.8rem;
@@ -233,22 +250,32 @@
     repeating-conic-gradient(rgba(255,255,255,0.04) 0 25%, rgba(255,255,255,0.0) 0 50%) 0 0 / 16px 16px;
   border: 1px solid var(--gold-deep);
   border-radius: 2px;
-  position: relative;
   overflow: auto;
-  text-align: center;
   max-height: 70vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
-.sheet-frame img,
-.sheet-frame canvas {
+.sheet-stage {
+  position: relative;
+  display: inline-block;
+  user-select: none;
+  cursor: crosshair;
+  flex: 0 0 auto;
+}
+.sheet-stage img,
+.sheet-stage canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  display: inline-block;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
 }
-.sheet-frame canvas {
+.sheet-stage canvas {
   position: absolute;
-  pointer-events: none;
   top: 0;
   left: 0;
+  pointer-events: none; /* drag handlers live on the wrapper */
 }
 #status-msg {
   margin-top: 1rem;
