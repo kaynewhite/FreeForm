@@ -13,12 +13,16 @@ working implementation. Currently only the auth slice is built.
 - `server/index.js` — Express app, session middleware, static client, port 5000
 - `server/db.js` — Postgres connection pool
 - `server/auth.js` — `/api/auth/register`, `/login`, `/logout`, `/me`
-- `client/` — static frontend (login + register UI, logged-in stub home)
+- `server/characters.js` — `/api/characters` (forge, /me, /me/die)
+- `server/races.js` — race definitions and stat modifiers (Human, Orc, Elf, Crystalline, Voidborn)
+- `server/admin.js` — Admin character stat block per design doc §3.8 (no race/class)
+- `client/` — static frontend (login, forge, character sheet)
+- `client/assets/sprites/admin/` — admin sprite sheets (base / weapons / icons)
 
 ## Database
 Tables created via SQL (no ORM yet):
 - `users(id, email, password_hash, role, created_at, last_login_at)`
-- `characters(id, account_id, name, race, gender, mana_cap, max_hp, hp, level, xp, control, efficiency, cast_speed, resistance, stamina_cap, created_at, died_at)` with partial unique indexes `unique_living_char_name` and `one_living_char_per_account`
+- `characters(id, account_id, name, race, gender, mana_cap, max_hp, hp, level, xp, control, efficiency, cast_speed, resistance, stamina_cap, created_at, died_at)` with partial unique indexes `unique_living_char_name` and `one_living_char_per_account`. `race` and `gender` are nullable — admins have neither (design doc §3.8).
 - `session(sid, sess, expire)` — session store
 
 ## Run

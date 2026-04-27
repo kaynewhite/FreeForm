@@ -124,8 +124,8 @@
       <span class="corner bl"></span>
       <span class="corner br"></span>
 
-      <h2 class="card-title">Forge a Vessel</h2>
-      <p class="flavor">Choose your name and form. The fates will choose your blood.</p>
+      <h2 class="card-title" id="forge-title">Forge a Vessel</h2>
+      <p class="flavor" id="forge-flavor">Choose your name and form. The fates will choose your blood.</p>
 
       <div class="rune-divider" aria-hidden="true">
         <span class="rune">✦</span><span class="line"></span><span class="rune">❖</span><span class="line"></span><span class="rune">✦</span>
@@ -152,12 +152,15 @@
 
         <button class="primary" type="submit">
           <span class="btn-flame"></span>
-          <span class="btn-text">Forge — Let the Fates Decide</span>
+          <span class="btn-text" id="forge-submit-text">Forge — Let the Fates Decide</span>
         </button>
         <p class="form-msg" data-role="msg"></p>
 
-        <div class="forge-rules">
+        <div class="forge-rules" id="forge-rules-player">
           <p><strong>Heed:</strong> race is rolled at the moment of forging — Human, Orc, Elf, Crystalline, or Voidborn, each at one chance in five. There are no rerolls. Your race is set until this vessel falls.</p>
+        </div>
+        <div class="forge-rules" id="forge-rules-admin" hidden>
+          <p><strong>Architect:</strong> you do not roll for race or pick a form. The Admin walks the realm as themselves — every spell already learned, every starting weapon to hand.</p>
         </div>
       </form>
     </section>
@@ -173,7 +176,7 @@
         <h2 class="card-title" id="char-name">—</h2>
         <span class="race-badge" id="char-race-badge">—</span>
       </div>
-      <p class="char-sub"><span id="char-gender">—</span> · Forged <span id="char-forged">—</span></p>
+      <p class="char-sub"><span id="char-gender">—</span><span id="char-sub-sep"> · </span>Forged <span id="char-forged">—</span></p>
 
       <p class="char-passive" id="char-passive">—</p>
 

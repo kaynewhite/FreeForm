@@ -1,6 +1,7 @@
 const express = require("express");
 const { query } = require("./db");
 const { RACES, rollRace, withRaceMeta } = require("./races");
+const { ADMIN_STATS, withAdminMeta } = require("./admin");
 
 const router = express.Router();
 
@@ -17,6 +18,12 @@ const CHAR_COLS = `id, name, race, gender,
   control, efficiency, cast_speed, resistance, stamina_cap,
   created_at`;
 
+function decorate(character) {
+  if (!character) return null;
+  // race === null means this is an admin character (see design doc §3.8).
+  return character.race ? withRaceMeta(character) : withAdminMeta(character);
+}
+
 router.get("/me", requireAuth, async (req, res) => {
   try {
     const r = await query(
@@ -26,7 +33,7 @@ router.get("/me", requireAuth, async (req, res) => {
        LIMIT 1`,
       [req.session.userId]
     );
-    res.json({ character: withRaceMeta(r.rows[0] || null) });
+    res.json({ character: decorate(r.rows[0] || null) });
   } catch (e) {
     console.error("[chars] me error", e);
     res.status(500).json({ error: "Server error." });
@@ -35,28 +42,28 @@ router.get("/me", requireAuth, async (req, res) => {
 
 router.post("/", requireAuth, async (req, res) => {
   const name = (req.body?.name || "").trim().replace(/\s+/g, " ");
-  const gender = (req.body?.gender || "").toLowerCase();
+  const isAdmin = req.session.role === "admin";
 
   if (!NAME_RE.test(name)) {
     return res.status(400).json({
       error: "Name must be 3-24 chars, start with a letter, and use only letters, numbers, spaces, _, ' or -.",
     });
   }
-  if (!VALID_GENDERS.has(gender)) {
-    return res.status(400).json({ error: "Choose Male or Female." });
-  }
 
-  try {
-    const existing = await query(
-      `SELECT id FROM characters WHERE account_id = $1 AND died_at IS NULL LIMIT 1`,
-      [req.session.userId]
-    );
-    if (existing.rows.length) {
-      return res.status(409).json({ error: "You already have a living vessel." });
+  // Admins skip race + gender entirely (design doc §3.8). Players still pick a gender.
+  let race = null;
+  let gender = null;
+  let stats;
+
+  if (isAdmin) {
+    stats = { ...ADMIN_STATS };
+  } else {
+    gender = (req.body?.gender || "").toLowerCase();
+    if (!VALID_GENDERS.has(gender)) {
+      return res.status(400).json({ error: "Choose Male or Female." });
     }
-
-    const race = rollRace();
-    const stats = {
+    race = rollRace();
+    stats = {
       mana_cap: 500,
       max_hp: 1000,
       hp: 1000,
@@ -69,6 +76,16 @@ router.post("/", requireAuth, async (req, res) => {
       stamina_cap: 100,
     };
     RACES[race].apply(stats);
+  }
+
+  try {
+    const existing = await query(
+      `SELECT id FROM characters WHERE account_id = $1 AND died_at IS NULL LIMIT 1`,
+      [req.session.userId]
+    );
+    if (existing.rows.length) {
+      return res.status(409).json({ error: "You already have a living vessel." });
+    }
 
     const r = await query(
       `INSERT INTO characters
@@ -84,7 +101,7 @@ router.post("/", requireAuth, async (req, res) => {
       ]
     );
 
-    res.status(201).json({ character: withRaceMeta(r.rows[0]) });
+    res.status(201).json({ character: decorate(r.rows[0]) });
   } catch (e) {
     if (e.code === "23505") {
       if (e.constraint === "unique_living_char_name") {
@@ -100,6 +117,7 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 // Dev-only: kill the current character so we can test permadeath flow.
+// (Per §3.8 admins "cannot be killed by normal means", but they can choose to.)
 router.post("/me/die", requireAuth, async (req, res) => {
   try {
     const r = await query(

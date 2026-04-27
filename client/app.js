@@ -95,8 +95,30 @@
   });
 
   // ---- character flow ----
+  let currentRole = "player";
+
+  function configureForge(role) {
+    const isAdmin = role === "admin";
+    const genderPick = $("#gender-pick");
+    const genderInputs = $$('input[name="gender"]', genderPick);
+    // Admins skip race + gender (design doc §3.8). Toggle the relevant bits.
+    genderPick.hidden = isAdmin;
+    genderInputs.forEach((i) => { i.required = !isAdmin; if (isAdmin) i.checked = false; });
+    $("#forge-rules-player").hidden = isAdmin;
+    $("#forge-rules-admin").hidden = !isAdmin;
+    $("#forge-title").textContent = isAdmin ? "Bind the Architect" : "Forge a Vessel";
+    $("#forge-flavor").textContent = isAdmin
+      ? "Name yourself, Architect. The realm bends around you."
+      : "Choose your name and form. The fates will choose your blood.";
+    $("#forge-submit-text").textContent = isAdmin
+      ? "Bind My Name"
+      : "Forge — Let the Fates Decide";
+  }
+
   async function afterAuth(user) {
+    currentRole = (user.role || "player").toLowerCase();
     showAccount(user);
+    configureForge(currentRole);
     const r = await api("/api/characters/me");
     if (r.body.character) showCharacter(r.body.character);
     else setScreen("forge");
@@ -107,6 +129,7 @@
     const btn = $("button.primary", forgeForm);
     btn.disabled = true; setMsg(forgeForm, "");
     const data = Object.fromEntries(new FormData(forgeForm).entries());
+    if (currentRole === "admin") delete data.gender;
     const { ok, body } = await api("/api/characters", {
       method: "POST",
       body: JSON.stringify(data),
@@ -134,18 +157,24 @@
     crystalline: { color: "#cfe4ff", glow: "rgba(207,228,255,0.55)" },
     voidborn:    { color: "#caa6ff", glow: "rgba(176,112,255,0.55)" },
   };
+  const ADMIN_THEME = { color: "#f6e4a3", glow: "rgba(246,228,163,0.60)" };
 
   function showCharacter(c) {
-    const theme = RACE_THEME[c.race] || RACE_THEME.human;
+    const isAdmin = !!c.is_admin;
+    const theme = isAdmin ? ADMIN_THEME : (RACE_THEME[c.race] || RACE_THEME.human);
     charCard.style.setProperty("--race-color", theme.color);
     charCard.style.setProperty("--race-glow", theme.glow);
+    charCard.classList.toggle("is-admin", isAdmin);
 
     $("#char-name").textContent = c.name;
 
     const badge = $("#char-race-badge");
-    badge.textContent = c.race_name || c.race;
+    badge.textContent = c.race_name || c.race || "—";
+    badge.classList.toggle("is-admin", isAdmin);
 
-    $("#char-gender").textContent = capitalize(c.gender);
+    // Admins have no gender. Hide the "<gender> · " bit entirely.
+    $("#char-gender").textContent = c.gender ? capitalize(c.gender) : "";
+    $("#char-sub-sep").hidden = !c.gender;
     $("#char-forged").textContent = c.created_at
       ? new Date(c.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
       : "—";
