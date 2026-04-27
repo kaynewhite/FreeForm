@@ -9,6 +9,19 @@ working implementation. Currently only the auth slice is built.
 - `bcrypt` for password hashing, `express-session` + `connect-pg-simple` for sessions
 - Vanilla HTML/CSS/JS client (PixiJS will be added when world rendering starts)
 
+## UI strategy
+All UI is hand-coded HTML + CSS — **no UI asset packs, no UI frameworks**.
+Tome aesthetic: dark navy background, gold accents, Cinzel / Cormorant Garamond
+/ MedievalSharp web fonts, inline SVG sigil. The same approach scales to every
+in-game UI surface (HUD, hotbar, inventory grid, character sheet, spellbook,
+crafting, dialogs, tooltips, minimap frame, death screen) — DOM elements
+overlaid on the PixiJS canvas, animated with CSS.
+
+The only assets that need to be real images are **in-world** content: character
+sprites (admin set already supplied), tile/terrain art, monster/NPC/item
+sprites, spell-effect sheets, and small per-item icons (32×32 PNGs made one at
+a time, not bought as a pack).
+
 ## Layout
 - `server/index.js` — Express app, session middleware, static client, port 5000
 - `server/db.js` — Postgres connection pool
