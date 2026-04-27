@@ -93,6 +93,8 @@
   $("#logout-btn").addEventListener("click", async () => {
     await api("/api/auth/logout", { method: "POST" });
     loginForm.reset(); registerForm.reset(); forgeForm.reset();
+    stopPortrait();
+    slicesCache = null;
     setTab("login"); setScreen("auth");
   });
 
@@ -151,6 +153,138 @@
     setScreen("forge");
   });
 
+  // ---- portrait animator ----
+  // Pulls per-sheet slice metadata (frames, frameRects, fps, scale) from
+  // /api/sprites/slices and animates a single sheet onto a canvas. This is
+  // the same data the /sprites.html editor saves, so any tweak there
+  // immediately changes how the character looks here.
+  const portraitFrame = $("#portrait-frame");
+  const portraitCanvas = $("#portrait-canvas");
+  const portraitEmpty = $("#portrait-empty");
+  const portrait = {
+    raf: 0,
+    img: null,
+    slice: null,
+    frameIndex: 0,
+    acc: 0,
+    last: 0,
+  };
+  let slicesCache = null;
+  async function getSlices() {
+    if (slicesCache) return slicesCache;
+    const r = await api("/api/sprites/slices");
+    slicesCache = r.body || {};
+    return slicesCache;
+  }
+  function stopPortrait() {
+    if (portrait.raf) cancelAnimationFrame(portrait.raf);
+    portrait.raf = 0;
+    portrait.img = null;
+    portrait.slice = null;
+  }
+  function showPortraitEmpty(message) {
+    stopPortrait();
+    portraitCanvas.hidden = true;
+    portraitCanvas.width = 1;
+    portraitCanvas.height = 1;
+    portraitEmpty.hidden = false;
+    if (message) portraitEmpty.textContent = message;
+  }
+  function inferSlice(img) {
+    // No saved slice yet — assume a single horizontal strip at full height.
+    return {
+      frames: 1, frameW: img.naturalWidth, frameH: img.naturalHeight,
+      offsetX: 0, offsetY: 0, gapX: 0,
+      perFrame: false, frameRects: null,
+      fps: 8, scale: 3,
+    };
+  }
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("image failed: " + url));
+      img.src = url;
+    });
+  }
+  async function startPortrait(url) {
+    stopPortrait();
+    portraitEmpty.hidden = true;
+    portraitCanvas.hidden = false;
+    let img;
+    try { img = await loadImage(url); }
+    catch { showPortraitEmpty("This vessel's likeness has not yet been woven."); return; }
+    const slices = await getSlices();
+    const raw = slices[url];
+    const slice = raw ? {
+      frames: raw.frames || 1,
+      frameW: raw.frameW || img.naturalWidth,
+      frameH: raw.frameH || img.naturalHeight,
+      offsetX: raw.offsetX || 0,
+      offsetY: raw.offsetY || 0,
+      gapX: raw.gapX || 0,
+      perFrame: !!raw.perFrame,
+      frameRects: Array.isArray(raw.frameRects) ? raw.frameRects : null,
+      fps: Math.max(1, Math.min(60, raw.fps || 8)),
+      scale: Math.max(1, Math.min(8, raw.scale || 3)),
+    } : inferSlice(img);
+    // Pick the largest frame width/height so each frame fits without clipping
+    // (per-frame rects can vary).
+    let maxW = slice.frameW, maxH = slice.frameH;
+    if (slice.perFrame && slice.frameRects) {
+      for (const r of slice.frameRects) {
+        if (r.w > maxW) maxW = r.w;
+        if (r.h > maxH) maxH = r.h;
+      }
+    }
+    portraitCanvas.width = maxW;
+    portraitCanvas.height = maxH;
+    portraitCanvas.style.width = (maxW * slice.scale) + "px";
+    portraitCanvas.style.height = (maxH * slice.scale) + "px";
+    const ctx = portraitCanvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    portrait.img = img;
+    portrait.slice = slice;
+    portrait.frameIndex = 0;
+    portrait.acc = 0;
+    portrait.last = performance.now();
+    const tick = (now) => {
+      const dt = (now - portrait.last) / 1000;
+      portrait.last = now;
+      const s = portrait.slice;
+      portrait.acc += dt;
+      const interval = 1 / s.fps;
+      while (portrait.acc >= interval) {
+        portrait.acc -= interval;
+        portrait.frameIndex += 1;
+      }
+      const idx = portrait.frameIndex % Math.max(1, s.frames);
+      let sx, sy, sw, sh;
+      if (s.perFrame && s.frameRects && s.frameRects[idx]) {
+        ({ x: sx, y: sy, w: sw, h: sh } = s.frameRects[idx]);
+      } else {
+        sx = s.offsetX + idx * (s.frameW + s.gapX);
+        sy = s.offsetY;
+        sw = s.frameW;
+        sh = s.frameH;
+      }
+      ctx.clearRect(0, 0, portraitCanvas.width, portraitCanvas.height);
+      // Center the (possibly smaller) frame inside the canvas so frames of
+      // different sizes don't jitter from the corner.
+      const dx = Math.floor((portraitCanvas.width - sw) / 2);
+      const dy = Math.floor((portraitCanvas.height - sh) / 2);
+      ctx.drawImage(portrait.img, sx, sy, sw, sh, dx, dy, sw, sh);
+      portrait.raf = requestAnimationFrame(tick);
+    };
+    portrait.raf = requestAnimationFrame(tick);
+  }
+  function portraitUrlFor(c) {
+    // Only the admin has art so far. Players will hook in once the per-race
+    // sheets are uploaded.
+    if (c.is_admin) return "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleDown-spritesheet.png";
+    return null;
+  }
+
   // ---- character display ----
   const RACE_THEME = {
     human:       { color: "#f4d499", glow: "rgba(244,212,153,0.45)" },
@@ -193,6 +327,10 @@
     $("#stat-eff").textContent     = `${c.efficiency}%`;
     $("#stat-res").textContent     = String(c.resistance);
     $("#stat-weapon").textContent  = c.starting_weapon || "—";
+
+    const url = portraitUrlFor(c);
+    if (url) startPortrait(url);
+    else showPortraitEmpty();
 
     setScreen("character");
   }
