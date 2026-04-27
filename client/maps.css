@@ -136,8 +136,18 @@
   accent-color: #d9a64a;
 }
 
+/* The sprite editor's .sheet-stage rule makes its canvas position:absolute
+   because that canvas overlays an <img> that gives the stage its height.
+   The tileset viewer has only the canvas — no underlying image — so we
+   undo that here, otherwise the stage collapses to 0px tall. */
 #map-canvas {
+  position: static;
+  pointer-events: auto;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   display: block;
+}
+#viewer-section .sheet-frame {
+  /* Centered tilesets read better when they don't pin to the top. */
+  align-items: center;
 }
