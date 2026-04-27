@@ -10,6 +10,7 @@
     fps: 8,
     scale: 3,
     playing: true,
+    activeIndex: 0, // which preview card the raw-sheet panel mirrors
   };
 
   // Sensible defaults for "frames per direction" by animation. The user can
@@ -76,7 +77,6 @@
 
   // ----- controls -----
   function populateControls() {
-    // Animations: in the order they appear in the doc.
     const anims = ["idle", "walking", "attack", "cast", "death"];
     animSel.innerHTML = "";
     for (const a of anims) {
@@ -87,8 +87,6 @@
     }
     animSel.value = state.animation;
 
-    // Weapons: union of all variants seen across animations, with no-weapon first
-    // and the 5 starter weapons next per design doc §3.7.
     const seen = new Set();
     for (const anim of anims) {
       const variants = state.manifest.animations[anim] || {};
@@ -123,7 +121,10 @@
   animSel.addEventListener("change", () => { syncFromControls(); applyDefaultFrames(); rebuild(); });
   framesInput.addEventListener("input", () => { syncFromControls(); rebuild(); });
   fpsInput.addEventListener("input", syncFromControls);
-  scaleInput.addEventListener("input", () => { syncFromControls(); rebuild(); });
+  scaleInput.addEventListener("input", () => {
+    syncFromControls();
+    for (const c of previewCards) sizePreviewCanvas(c);
+  });
   playToggle.addEventListener("change", syncFromControls);
 
   function applyDefaultFrames() {
@@ -132,15 +133,19 @@
   }
 
   // ----- rendering -----
-  let previewCards = []; // [{direction, canvas, ctx, sheet, frameW, frameH, row}]
+  // Each preview card has its own slice settings so you can dial in sheets
+  // that have padding, inconsistent frame widths, or off-center crops.
+  let previewCards = [];
   let rafId = null;
 
   function rebuild() {
     cancelAnimationFrame(rafId);
     previewCards = [];
+    state.activeIndex = 0;
     previewGrid.innerHTML = "";
     sheetImg.removeAttribute("src");
     sheetOverlay.width = sheetOverlay.height = 0;
+    sheetMeta.textContent = "—";
 
     const variants = state.manifest?.animations?.[state.animation] || {};
     const entries = variants[state.weapon] || [];
@@ -152,61 +157,59 @@
     const isDeath = state.animation === "death";
     const combined = entries.find((e) => e.combined);
     const perDir = entries.filter((e) => !e.combined && e.direction);
-    const single = entries.find((e) => !e.combined && !e.direction); // only used for death
+    const single = entries.find((e) => !e.combined && !e.direction);
 
     if (isDeath && single) {
-      layoutHint.textContent = `Death is one non-directional sheet. Strip layout: 1 row × N frames.`;
+      layoutHint.textContent = `Death is a single non-directional strip — 1 row × N frames.`;
       buildPerDirection([{ ...single, direction: "death" }], false);
-      previewRawSheet(single.url);
       return;
     }
-
     if (combined) {
       layoutHint.textContent = `Combined sheet — 4 rows × N frames, row order Up · Left · Down · Right.`;
       buildCombined(combined);
-      previewRawSheet(combined.url);
       return;
     }
-
     if (perDir.length) {
       const haveAll = ALL_DIRECTIONS.every((d) => perDir.some((e) => e.direction === d));
       layoutHint.textContent = haveAll
         ? `Per-direction strips — 4 separate sheets, each 1 row × N frames.`
         : `Per-direction strips — ${perDir.length}/4 directions present.`;
       buildPerDirection(perDir, true);
-      // Show whichever sheet matches the currently-displayed first card.
-      previewRawSheet(perDir[0].url);
-      return;
     }
   }
 
   function buildPerDirection(entries, useDirNames) {
-    for (const e of entries) {
-      const card = makeCard(useDirNames ? e.direction : "death");
+    // Build cards in stable direction order so the grid reads down/left/right/up.
+    const ordered = useDirNames
+      ? [...entries].sort((a, b) => ALL_DIRECTIONS.indexOf(a.direction) - ALL_DIRECTIONS.indexOf(b.direction))
+      : entries;
+
+    for (const e of ordered) {
+      const card = makeCard(useDirNames ? e.direction : "death", e.url);
       previewGrid.appendChild(card.el);
+      previewCards.push(card);
       loadImage(e.url).then((img) => {
-        const frameW = Math.floor(img.naturalWidth / state.frames);
-        const frameH = img.naturalHeight;
         card.sheet = img;
-        card.frameW = frameW;
-        card.frameH = frameH;
-        card.row = 0;
-        card.foot.querySelector(".frame-info").textContent =
-          `${img.naturalWidth}×${img.naturalHeight} → frame ${frameW}×${frameH}`;
+        card.frameW = Math.max(1, Math.floor(img.naturalWidth / state.frames));
+        card.frameH = img.naturalHeight;
+        card.offsetX = 0;
+        card.offsetY = 0;
+        card.frames = state.frames;
+        writeInputsFrom(card);
         sizePreviewCanvas(card);
-        previewCards.push(card);
+        updateCardMeta(card);
+        if (card === previewCards[0]) showRaw(card);
         startLoop();
-      }).catch((err) => {
+      }).catch(() => {
         card.el.classList.add("is-missing");
         card.foot.querySelector(".frame-info").textContent = "load failed";
       });
     }
-    // Add placeholders for missing directions so the grid stays 4-wide.
     if (useDirNames) {
-      const present = new Set(entries.map((e) => e.direction));
+      const present = new Set(ordered.map((e) => e.direction));
       for (const d of ALL_DIRECTIONS) {
         if (present.has(d)) continue;
-        const card = makeCard(d);
+        const card = makeCard(d, null);
         card.el.classList.add("is-missing");
         card.foot.querySelector(".frame-info").textContent = "no sheet";
         previewGrid.appendChild(card.el);
@@ -215,51 +218,149 @@
   }
 
   function buildCombined(entry) {
+    for (let i = 0; i < 4; i++) {
+      const card = makeCard(COMBINED_ROW_ORDER[i], entry.url);
+      card.row = i;
+      previewGrid.appendChild(card.el);
+      previewCards.push(card);
+    }
     loadImage(entry.url).then((img) => {
-      const rowH = Math.floor(img.naturalHeight / 4);
-      const frameW = Math.floor(img.naturalWidth / state.frames);
-      for (let i = 0; i < 4; i++) {
-        const dir = COMBINED_ROW_ORDER[i];
-        const card = makeCard(dir);
-        previewGrid.appendChild(card.el);
+      const rowH = Math.max(1, Math.floor(img.naturalHeight / 4));
+      const frameW = Math.max(1, Math.floor(img.naturalWidth / state.frames));
+      for (const card of previewCards) {
         card.sheet = img;
         card.frameW = frameW;
         card.frameH = rowH;
-        card.row = i;
-        card.foot.querySelector(".frame-info").textContent =
-          `frame ${frameW}×${rowH} (row ${i})`;
+        card.offsetX = 0;
+        card.offsetY = card.row * rowH;
+        card.frames = state.frames;
+        writeInputsFrom(card);
         sizePreviewCanvas(card);
-        previewCards.push(card);
+        updateCardMeta(card);
       }
+      showRaw(previewCards[0]);
       startLoop();
     }).catch(() => setStatus("Failed to load combined sheet."));
   }
 
-  function makeCard(direction) {
+  function makeCard(direction, url) {
     const el = document.createElement("div");
     el.className = "preview-card";
+    el.tabIndex = 0;
+
     const label = document.createElement("div");
     label.className = "preview-label";
     label.textContent = direction.toUpperCase();
+
     const wrap = document.createElement("div");
     wrap.className = "preview-canvas-wrap";
     const canvas = document.createElement("canvas");
     wrap.appendChild(canvas);
+
     const foot = document.createElement("div");
     foot.className = "preview-foot";
     foot.innerHTML = `<div>${direction}</div><div class="frame-info">…</div>`;
-    el.append(label, wrap, foot);
-    return { el, canvas, ctx: canvas.getContext("2d"), foot, direction };
+
+    // Per-card slice controls
+    const tweak = document.createElement("div");
+    tweak.className = "preview-tweak";
+    tweak.innerHTML = `
+      <label>N<input type="number" data-k="frames" min="1" max="64" /></label>
+      <label>W<input type="number" data-k="frameW" min="1" /></label>
+      <label>H<input type="number" data-k="frameH" min="1" /></label>
+      <label>X<input type="number" data-k="offsetX" min="0" /></label>
+      <label>Y<input type="number" data-k="offsetY" min="0" /></label>
+      <button type="button" class="t-reset" title="Reset to auto-computed defaults">⟲</button>
+    `;
+
+    const card = {
+      el, canvas, ctx: canvas.getContext("2d"),
+      foot, tweak, direction, url,
+      sheet: null,
+      frameW: 1, frameH: 1, offsetX: 0, offsetY: 0, frames: state.frames,
+      row: 0,
+    };
+
+    // Wire the input listeners
+    tweak.querySelectorAll("input").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        const k = inp.dataset.k;
+        const v = Math.max(parseInt(inp.min, 10) || 0, parseInt(inp.value, 10) || 0);
+        card[k] = v;
+        if (k === "frameW" || k === "frameH") sizePreviewCanvas(card);
+        updateCardMeta(card);
+        if (card === previewCards[state.activeIndex]) drawSheetOverlay();
+      });
+    });
+    tweak.querySelector(".t-reset").addEventListener("click", () => resetCard(card));
+
+    el.addEventListener("click", () => focusCard(card));
+    el.addEventListener("focus", () => focusCard(card));
+
+    el.append(label, wrap, foot, tweak);
+    return card;
+  }
+
+  function writeInputsFrom(card) {
+    card.tweak.querySelector('[data-k="frames"]').value = card.frames;
+    card.tweak.querySelector('[data-k="frameW"]').value = card.frameW;
+    card.tweak.querySelector('[data-k="frameH"]').value = card.frameH;
+    card.tweak.querySelector('[data-k="offsetX"]').value = card.offsetX;
+    card.tweak.querySelector('[data-k="offsetY"]').value = card.offsetY;
+  }
+
+  function resetCard(card) {
+    if (!card.sheet) return;
+    if (typeof card.row === "number" && card.row > 0) {
+      // combined sheet card
+      card.frameW = Math.max(1, Math.floor(card.sheet.naturalWidth / state.frames));
+      card.frameH = Math.max(1, Math.floor(card.sheet.naturalHeight / 4));
+      card.offsetX = 0;
+      card.offsetY = card.row * card.frameH;
+    } else if (typeof card.row === "number" && previewCards.some((c) => c !== card && c.sheet === card.sheet)) {
+      // top row of a combined sheet (row=0)
+      card.frameW = Math.max(1, Math.floor(card.sheet.naturalWidth / state.frames));
+      card.frameH = Math.max(1, Math.floor(card.sheet.naturalHeight / 4));
+      card.offsetX = 0;
+      card.offsetY = 0;
+    } else {
+      // per-direction sheet
+      card.frameW = Math.max(1, Math.floor(card.sheet.naturalWidth / state.frames));
+      card.frameH = card.sheet.naturalHeight;
+      card.offsetX = 0;
+      card.offsetY = 0;
+    }
+    card.frames = state.frames;
+    writeInputsFrom(card);
+    sizePreviewCanvas(card);
+    updateCardMeta(card);
+    if (card === previewCards[state.activeIndex]) drawSheetOverlay();
+  }
+
+  function focusCard(card) {
+    const idx = previewCards.indexOf(card);
+    if (idx < 0) return;
+    state.activeIndex = idx;
+    previewCards.forEach((c) => c.el.classList.toggle("is-active", c === card));
+    showRaw(card);
   }
 
   function sizePreviewCanvas(card) {
-    const w = card.frameW * state.scale;
-    const h = card.frameH * state.scale;
-    card.canvas.width = card.frameW;
-    card.canvas.height = card.frameH;
-    card.canvas.style.width = `${w}px`;
-    card.canvas.style.height = `${h}px`;
+    const w = Math.max(1, card.frameW);
+    const h = Math.max(1, card.frameH);
+    card.canvas.width = w;
+    card.canvas.height = h;
+    card.canvas.style.width = `${w * state.scale}px`;
+    card.canvas.style.height = `${h * state.scale}px`;
     card.ctx.imageSmoothingEnabled = false;
+  }
+
+  function updateCardMeta(card) {
+    if (!card.sheet) return;
+    const sw = card.sheet.naturalWidth;
+    const sh = card.sheet.naturalHeight;
+    card.foot.querySelector(".frame-info").textContent =
+      `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})`;
   }
 
   function startLoop() {
@@ -273,13 +374,14 @@
       const interval = 1 / state.fps;
       while (acc >= interval) {
         acc -= interval;
-        frameIndex = (frameIndex + 1) % state.frames;
+        frameIndex += 1;
       }
       for (const c of previewCards) {
         if (!c.sheet) continue;
+        const idx = frameIndex % Math.max(1, c.frames);
         c.ctx.clearRect(0, 0, c.canvas.width, c.canvas.height);
-        const sx = frameIndex * c.frameW;
-        const sy = c.row * c.frameH;
+        const sx = c.offsetX + idx * c.frameW;
+        const sy = c.offsetY;
         c.ctx.drawImage(c.sheet, sx, sy, c.frameW, c.frameH, 0, 0, c.frameW, c.frameH);
       }
       drawSheetOverlay(frameIndex);
@@ -288,12 +390,11 @@
     rafId = requestAnimationFrame(tick);
   }
 
-  // ----- raw-sheet view with grid overlay -----
-  let sheetMetaImg = null;
-  function previewRawSheet(url) {
-    sheetImg.src = url;
+  // ----- raw-sheet view (mirrors the active card) -----
+  function showRaw(card) {
+    if (!card || !card.url) return;
+    sheetImg.src = card.url;
     sheetImg.onload = () => {
-      sheetMetaImg = sheetImg;
       sheetOverlay.width = sheetImg.naturalWidth;
       sheetOverlay.height = sheetImg.naturalHeight;
       sheetOverlay.style.width = `${sheetImg.naturalWidth}px`;
@@ -301,48 +402,52 @@
       sheetImg.style.width = `${sheetImg.naturalWidth}px`;
       sheetImg.style.height = `${sheetImg.naturalHeight}px`;
       sheetMeta.textContent =
-        `${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
-        `frame ${Math.floor(sheetImg.naturalWidth / state.frames)}×` +
-        `${sheetImg.naturalHeight} (assuming ${state.frames} frames per row)`;
-      drawSheetOverlay(0);
+        `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
+        `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY}) · ${card.frames} frames`;
+      drawSheetOverlay();
     };
   }
 
-  function drawSheetOverlay(frameIndex) {
-    if (!sheetMetaImg) return;
+  function drawSheetOverlay(frameIndex = 0) {
+    const card = previewCards[state.activeIndex];
+    if (!card || !card.sheet) return;
+    if (sheetImg.src.indexOf(card.url.split("/").pop()) === -1) return;
+
     const ctx = sheetOverlay.getContext("2d");
     const w = sheetOverlay.width;
     const h = sheetOverlay.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Determine current layout: 1 row (per-direction or death) vs 4 rows (combined).
-    const variants = state.manifest?.animations?.[state.animation] || {};
-    const entries = variants[state.weapon] || [];
-    const combined = entries.find((e) => e.combined);
-    const rows = combined ? 4 : 1;
-    const frameW = Math.floor(w / state.frames);
-    const frameH = Math.floor(h / rows);
-
-    // Faint full grid
-    ctx.strokeStyle = "rgba(246,228,163,0.25)";
+    // Faint frame grid for the active card's slice settings
+    ctx.strokeStyle = "rgba(246,228,163,0.35)";
     ctx.lineWidth = 1;
-    for (let i = 1; i < state.frames; i++) {
-      const x = Math.floor(i * frameW) + 0.5;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    for (let i = 0; i <= card.frames; i++) {
+      const x = card.offsetX + i * card.frameW;
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, card.offsetY);
+      ctx.lineTo(x + 0.5, card.offsetY + card.frameH);
+      ctx.stroke();
     }
-    for (let r = 1; r < rows; r++) {
-      const y = Math.floor(r * frameH) + 0.5;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
+    // Top + bottom rules
+    ctx.beginPath();
+    ctx.moveTo(card.offsetX, card.offsetY + 0.5);
+    ctx.lineTo(card.offsetX + card.frames * card.frameW, card.offsetY + 0.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(card.offsetX, card.offsetY + card.frameH - 0.5);
+    ctx.lineTo(card.offsetX + card.frames * card.frameW, card.offsetY + card.frameH - 0.5);
+    ctx.stroke();
 
-    // Highlight the currently-playing frame in each row
+    // Highlight the currently-playing frame
+    const idx = frameIndex % Math.max(1, card.frames);
     ctx.strokeStyle = "#ffd76b";
     ctx.lineWidth = 2;
-    for (let r = 0; r < rows; r++) {
-      const x = frameIndex * frameW;
-      const y = r * frameH;
-      ctx.strokeRect(x + 1, y + 1, frameW - 2, frameH - 2);
-    }
+    ctx.strokeRect(
+      card.offsetX + idx * card.frameW + 1,
+      card.offsetY + 1,
+      card.frameW - 2,
+      card.frameH - 2
+    );
   }
 
   // ----- init -----
