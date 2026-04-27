@@ -1,0 +1,18 @@
+{
+  "shard": "default",
+  "tileSize": 16,
+  "createdAt": "2026-04-27T16:52:21.818Z",
+  "updatedAt": "2026-04-27T16:54:16.037Z",
+  "layers": [
+    {
+      "name": "ground",
+      "tiles": {
+        "-5,0": "terrain_set:200"
+      }
+    },
+    {
+      "name": "decor",
+      "tiles": {}
+    }
+  ]
+}
