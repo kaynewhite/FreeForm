@@ -5,6 +5,14 @@ const store = require("./store");
 
 const router = express.Router();
 
+// Writes (paint/clear-layer) are admin-only — those endpoints get this gate
+// applied below. Reads stay open to any logged-in player so their client can
+// render the shard.
+function requireAdmin(req, res, next) {
+  if (req.session?.role !== "admin") return res.status(403).json({ error: "Admins only" });
+  next();
+}
+
 const WORLD_DIR = path.join(store.DATA_DIR, "world");
 fs.mkdirSync(WORLD_DIR, { recursive: true });
 
@@ -179,7 +187,7 @@ router.get("/:shard", (req, res) => {
 // Paint a batch of tiles. Body shape:
 //   { layer: "ground", tiles: [{ x, y, tile: "terrain_set:5" }, ...] }
 // To erase, send tile: null. Mixed paint+erase in one batch is fine.
-router.post("/:shard/paint", (req, res) => {
+router.post("/:shard/paint", requireAdmin, (req, res) => {
   const file = shardPath(req.params.shard);
   if (!file) return res.status(400).json({ error: "Invalid shard name" });
   const { layer, tiles } = req.body || {};
@@ -228,7 +236,7 @@ router.post("/:shard/paint", (req, res) => {
 });
 
 // Wipe an entire layer's tiles (the layer itself stays).
-router.post("/:shard/clear-layer", (req, res) => {
+router.post("/:shard/clear-layer", requireAdmin, (req, res) => {
   const file = shardPath(req.params.shard);
   if (!file) return res.status(400).json({ error: "Invalid shard name" });
   const { layer } = req.body || {};

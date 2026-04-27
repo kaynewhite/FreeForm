@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/realm.css" />
 </head>
 <body>
   <div class="bg-vignette"></div>
@@ -205,7 +206,7 @@
       </div>
 
       <div class="char-actions">
-        <button class="primary" id="enter-btn" type="button" disabled title="The world is still being woven.">
+        <button class="primary" id="enter-btn" type="button" title="Step into the live realm.">
           <span class="btn-flame"></span>
           <span class="btn-text">Enter the Realm</span>
         </button>
@@ -213,13 +214,65 @@
           Slay (dev)
         </button>
       </div>
-      <p class="dev-note">The world is still being woven. Soon you may step in.</p>
+      <p class="dev-note" id="dev-note-admin" hidden>Admin: in-game, type <code>/command we</code>, <code>/command world_edit</code>, or <code>/command server_edit</code> to open the live tile editor.</p>
+      <p class="dev-note" id="dev-note-player">The world is woven. Step through to walk the plain grass.</p>
       <p class="form-msg" data-role="char-msg"></p>
     </section>
 
     <footer class="footnote">— FreeForm · v0.1 —</footer>
   </main>
 
+  <!-- REALM: full-viewport in-game view. Shown after "Enter the Realm".
+       Painting happens live here via /command we, /command world_edit,
+       and /command server_edit. The palette is screen-contained so only
+       the palette panel scrolls — the page itself never does. -->
+  <section class="realm" id="realm" hidden>
+    <canvas class="realm-canvas" id="realm-canvas"></canvas>
+
+    <div class="realm-hud-top">
+      <button class="link-btn" id="leave-realm-btn" type="button">← Leave the realm</button>
+      <span class="realm-coords" id="realm-coords">(0, 0)</span>
+      <span class="realm-edit-flag" id="realm-edit-flag" hidden>Editing · <span id="realm-edit-mode">we</span></span>
+    </div>
+
+    <!-- Chat / command rail -->
+    <div class="realm-chat" id="realm-chat">
+      <div class="chat-log" id="chat-log"></div>
+      <form class="chat-input-row" id="chat-form">
+        <input type="text" id="chat-input" autocomplete="off" placeholder="Speak — or whisper a /command we" maxlength="200" />
+      </form>
+    </div>
+
+    <!-- Editor palette overlay. Hidden by default. Toggled by slash command.
+         Fixed to the right edge, screen-contained: only the palette body
+         scrolls, never the page. -->
+    <aside class="realm-palette" id="realm-palette" hidden>
+      <header class="palette-head">
+        <span class="palette-title">Tile Palette</span>
+        <span class="palette-mode" id="palette-mode">we</span>
+        <button class="ghost-x" id="palette-close-btn" type="button" title="Close (Esc)">×</button>
+      </header>
+      <div class="palette-toolbar">
+        <label class="ctrl">
+          <span>Layer</span>
+          <select id="palette-layer"></select>
+        </label>
+        <label class="ctrl">
+          <span>Brush</span>
+          <select id="palette-brush">
+            <option value="paint">Paint</option>
+            <option value="erase">Erase</option>
+          </select>
+        </label>
+        <button class="ghost danger" id="palette-clear-btn" type="button">Clear layer</button>
+      </div>
+      <p class="palette-selected">Selected: <span id="palette-selected-readout">none — pick a tile</span></p>
+      <div class="palette-body" id="palette-body">Loading tilesets…</div>
+      <p class="palette-hint">Left-click world: paint · Right-click: erase · WASD/Arrows: pan · Esc: close</p>
+    </aside>
+  </section>
+
   <script src="/app.js"></script>
+  <script src="/realm.js"></script>
 </body>
 </html>

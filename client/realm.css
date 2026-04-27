@@ -1,0 +1,323 @@
+/* ---- in-game realm view ----
+   Full-viewport. Sits on top of the main shell when the player steps in.
+   The world is rendered to <canvas id="realm-canvas">. The chat rail and
+   the editor palette are absolutely-positioned overlays on top of it.
+   The page itself never scrolls — only the palette body does. */
+
+.realm[hidden] { display: none; }
+.realm {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #06070b;
+  color: var(--ink);
+  overflow: hidden;
+  font-family: var(--font-script, "Cormorant Garamond", serif);
+}
+.realm-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* ---- top HUD ---- */
+.realm-hud-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1rem;
+  background: linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0));
+  pointer-events: none;
+}
+.realm-hud-top > * { pointer-events: auto; }
+.realm-coords {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  padding: 0.25rem 0.55rem;
+  border-radius: 2px;
+}
+.realm-edit-flag {
+  margin-left: auto;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #1d150a;
+  background: linear-gradient(180deg, #f6e4a3, #caa24a);
+  border: 1px solid #7a5a1f;
+  padding: 0.3rem 0.7rem;
+  border-radius: 2px;
+  box-shadow: 0 0 12px rgba(246,228,163,0.35);
+}
+.realm-edit-flag[hidden] { display: none; }
+
+/* ---- chat rail ---- */
+.realm-chat {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  width: min(440px, 60vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  z-index: 2;
+}
+.chat-log {
+  max-height: 30vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-3) transparent;
+}
+.chat-log:empty { display: none; }
+.chat-log .chat-line {
+  line-height: 1.25;
+}
+.chat-log .chat-line.is-cmd {
+  color: var(--gold-1);
+  font-style: italic;
+}
+.chat-log .chat-line.is-err {
+  color: var(--danger);
+}
+.chat-log .chat-line.is-good {
+  color: var(--good);
+}
+.chat-log .chat-line .who {
+  color: var(--ink-mute);
+  margin-right: 0.4rem;
+}
+.chat-input-row {
+  display: flex;
+}
+.chat-input-row input {
+  flex: 1;
+  background: rgba(0,0,0,0.55);
+  color: var(--ink);
+  border: 1px solid var(--gold-deep);
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+  font-size: 1rem;
+  border-radius: 2px;
+  outline: none;
+}
+.chat-input-row input:focus {
+  border-color: var(--gold-2);
+  box-shadow: 0 0 8px rgba(216,178,87,0.35);
+}
+
+/* ---- editor palette overlay ---- */
+.realm-palette[hidden] { display: none; }
+.realm-palette {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Screen-contained. Width is capped so the world stays visible to the
+     left, and the inner palette body is the only thing that scrolls — the
+     page never scrolls because the realm is position:fixed. */
+  width: min(420px, 38vw);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(16,12,20,0.96), rgba(7,6,10,0.96));
+  border-left: 1px solid var(--gold-deep);
+  box-shadow: -8px 0 24px rgba(0,0,0,0.55);
+  z-index: 3;
+  /* The palette itself never scrolls — only its body does. */
+  overflow: hidden;
+}
+.palette-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--gold-deep);
+  flex: 0 0 auto;
+}
+.palette-title {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+}
+.palette-mode {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--ink-mute);
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--gold-deep);
+  padding: 0.1rem 0.4rem;
+  border-radius: 2px;
+}
+.ghost-x {
+  margin-left: auto;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--gold-deep);
+  width: 1.8rem;
+  height: 1.8rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.ghost-x:hover { color: var(--gold-1); border-color: var(--gold-2); }
+
+.palette-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.9rem;
+  align-items: end;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--gold-deep);
+  flex: 0 0 auto;
+}
+.palette-toolbar .ctrl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.palette-toolbar select {
+  background: rgba(0,0,0,0.45);
+  color: var(--ink-soft);
+  border: 1px solid var(--gold-deep);
+  padding: 0.25rem 0.4rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  border-radius: 2px;
+  min-width: 7rem;
+}
+.palette-toolbar .ghost {
+  margin-left: auto;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--gold-deep);
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.palette-toolbar .ghost:hover { color: var(--gold-1); border-color: var(--gold-2); }
+.palette-toolbar .ghost.danger { color: var(--danger); border-color: rgba(255,138,122,0.4); }
+.palette-toolbar .ghost.danger:hover { color: #fff; background: rgba(255,138,122,0.18); }
+
+.palette-selected {
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.9rem;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--gold-deep);
+  flex: 0 0 auto;
+}
+.palette-selected span {
+  font-family: monospace;
+  color: var(--ink-soft);
+}
+
+/* The ONLY scrollable region inside the palette. The page itself never
+   scrolls; the user only ever scrolls within this body to find a tile. */
+.palette-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.6rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-3) transparent;
+}
+.palette-tileset {
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  padding: 0.5rem 0.6rem;
+  background: rgba(0,0,0,0.3);
+}
+.palette-tileset .ts-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+}
+.palette-tileset .ts-head .name {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.palette-tileset .ts-head .meta {
+  font-size: 0.8rem;
+  color: var(--ink-mute);
+}
+.palette-stage {
+  position: relative;
+  display: inline-block;
+  background:
+    repeating-conic-gradient(rgba(255,255,255,0.04) 0 25%, rgba(255,255,255,0.0) 0 50%) 0 0 / 12px 12px,
+    rgba(0,0,0,0.4);
+  border: 1px solid rgba(217,166,74,0.35);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: auto;
+}
+.palette-stage canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.palette-stage .selection {
+  position: absolute;
+  border: 2px solid #ffe9a8;
+  box-shadow: 0 0 6px rgba(255,233,168,0.7), inset 0 0 6px rgba(255,233,168,0.5);
+  pointer-events: none;
+  display: none;
+}
+
+.palette-empty {
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+}
+.palette-empty a { color: var(--gold-1); }
+
+.palette-hint {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border-top: 1px solid var(--gold-deep);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+  background: rgba(0,0,0,0.3);
+}

@@ -1,4 +1,4 @@
-(() => {
+ (() => {
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -47,6 +47,14 @@
     }
     $("#sandbox-link").hidden = role !== "admin";
     $("#maps-link").hidden = role !== "admin";
+    // Surface the slash-command hint on the character sheet so admins know
+    // the /command we toggle exists once they step into the realm.
+    const adminNote = $("#dev-note-admin");
+    const playerNote = $("#dev-note-player");
+    if (adminNote && playerNote) {
+      adminNote.hidden = role !== "admin";
+      playerNote.hidden = role === "admin";
+    }
   }
 
   // ---- auth tabs / forms ----
@@ -142,6 +150,19 @@
     if (!ok) { setMsg(forgeForm, body.error || "Forging failed."); return; }
     forgeForm.reset();
     revealCharacter(body.character);
+  });
+
+  // ---- enter the realm ----
+  // The realm view lives in #realm and is owned by client/realm.js. We just
+  // hand it the current user (so it knows whether to allow the slash-command
+  // editor) and unhide it; the main shell stays in the DOM behind it so a
+  // "Leave the realm" pop returns to the character sheet untouched.
+  $("#enter-btn").addEventListener("click", () => {
+    if (window.FreeformRealm) window.FreeformRealm.enter({ role: currentRole });
+  });
+  window.addEventListener("freeform:leave-realm", () => {
+    // Realm asked to leave — nothing to do, the realm view hid itself and
+    // the character card was never unmounted.
   });
 
   $("#slay-btn").addEventListener("click", async () => {

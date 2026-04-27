@@ -66,7 +66,11 @@ app.use("/api/auth", authRouter);
 app.use("/api/characters", charactersRouter);
 app.use("/api/sprites", requireAdmin, spritesRouter);
 app.use("/api/maps", requireAdmin, mapsRouter);
-app.use("/api/world", requireAdmin, worldRouter);
+// /api/world: any logged-in player can READ the world (their client renders
+// it), but only admins can WRITE (paint/erase/clear) — those calls come from
+// the in-game /command we, /command world_edit, /command server_edit slash
+// commands. The world router enforces this split internally.
+app.use("/api/world", requireAuth, worldRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });

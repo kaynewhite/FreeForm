@@ -48,9 +48,9 @@
         "h": 54
       }
     ],
-    "fps": 1,
+    "fps": 2,
     "scale": 3,
-    "updatedAt": "2026-04-27T16:32:00.732Z",
+    "updatedAt": "2026-04-27T18:18:37.346Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleRight-spritesheet.png": {
@@ -102,7 +102,9 @@
         "h": 54
       }
     ],
-    "updatedAt": "2026-04-27T13:43:30.114Z",
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T18:18:05.456Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleLeft-spritesheet.png": {
@@ -127,7 +129,9 @@
         "h": 54
       }
     ],
-    "updatedAt": "2026-04-27T13:44:59.375Z",
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T18:18:14.202Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleRight-spritesheet.png": {
@@ -152,9 +156,9 @@
         "h": 54
       }
     ],
-    "fps": 8,
+    "fps": 2,
     "scale": 3,
-    "updatedAt": "2026-04-27T13:48:31.908Z",
+    "updatedAt": "2026-04-27T18:18:02.526Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleUp-spritesheet.png": {
@@ -179,9 +183,9 @@
         "h": 54
       }
     ],
-    "fps": 8,
+    "fps": 2,
     "scale": 3,
-    "updatedAt": "2026-04-27T13:49:02.452Z",
+    "updatedAt": "2026-04-27T18:18:18.645Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleDown-spritesheet.png": {
@@ -206,9 +210,9 @@
         "h": 54
       }
     ],
-    "fps": 1,
+    "fps": 2,
     "scale": 3,
-    "updatedAt": "2026-04-27T16:31:19.271Z",
+    "updatedAt": "2026-04-27T18:18:30.300Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkRight-spritesheet.png": {
