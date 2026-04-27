@@ -4,7 +4,7 @@
   // ----- state -----
   const state = {
     manifest: null,
-    savedSlices: {}, // url → { frames, frameW, frameH, offsetX, offsetY, gapX }
+    savedSlices: {}, // url → saved slice payload
     weapon: "no-weapon",
     animation: "idle",
     frames: 4,
@@ -69,26 +69,33 @@
         method: "PUT",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: card.url,
-          frames: card.frames,
-          frameW: card.frameW,
-          frameH: card.frameH,
-          offsetX: card.offsetX,
-          offsetY: card.offsetY,
-          gapX: card.gapX,
-        }),
+        body: JSON.stringify(slicePayload(card)),
       });
       if (!r.ok) throw new Error(await r.text());
-      card.savedSlice = {
-        frames: card.frames, frameW: card.frameW, frameH: card.frameH,
-        offsetX: card.offsetX, offsetY: card.offsetY, gapX: card.gapX,
-      };
+      card.savedSlice = clonePayload(card);
       flashSaveBadge(card, "saved");
     } catch (err) {
       console.error("save slice failed", err);
       flashSaveBadge(card, "save failed", true);
     }
+  }
+  function slicePayload(card) {
+    return {
+      url: card.url,
+      frames: card.frames,
+      frameW: card.frameW,
+      frameH: card.frameH,
+      offsetX: card.offsetX,
+      offsetY: card.offsetY,
+      gapX: card.gapX,
+      perFrame: !!card.perFrame,
+      frameRects: card.perFrame
+        ? card.frameRects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }))
+        : null,
+    };
+  }
+  function clonePayload(card) {
+    return slicePayload(card);
   }
   async function deleteSlice(card) {
     if (!card || !card.url) return;
@@ -218,6 +225,12 @@
       // Combined sheets: keep each row's Y; per-direction sheets: copy Y too.
       if (c.sheet !== src.sheet) c.offsetY = src.offsetY;
       c.frames = src.frames;
+      // Per-frame: copy the entire frameRects array as well.
+      c.perFrame = !!src.perFrame;
+      c.frameRects = src.perFrame
+        ? src.frameRects.map((r) => ({ ...r }))
+        : null;
+      c.activeFrame = 0;
       writeInputsFrom(c);
       sizePreviewCanvas(c);
       updateCardMeta(c);
@@ -294,7 +307,7 @@
       loadImage(e.url).then((img) => {
         card.sheet = img;
         if (saved) {
-          Object.assign(card, saved);
+          hydrateFromSaved(card, saved);
         } else {
           card.frameW = Math.max(1, Math.floor(img.naturalWidth / state.frames));
           card.frameH = img.naturalHeight;
@@ -303,6 +316,8 @@
           card.gapX = 0;
           card.frames = state.frames;
         }
+        ensureFrameRectsShape(card);
+        rebuildActiveFrameSelect(card);
         writeInputsFrom(card);
         sizePreviewCanvas(card);
         updateCardMeta(card);
@@ -342,7 +357,7 @@
         const saved = lookupSaved(card.url);
         card.savedSlice = saved;
         if (saved) {
-          Object.assign(card, saved);
+          hydrateFromSaved(card, saved);
         } else {
           card.frameW = frameW;
           card.frameH = rowH;
@@ -351,6 +366,8 @@
           card.gapX = 0;
           card.frames = state.frames;
         }
+        ensureFrameRectsShape(card);
+        rebuildActiveFrameSelect(card);
         writeInputsFrom(card);
         sizePreviewCanvas(card);
         updateCardMeta(card);
@@ -358,6 +375,20 @@
       showRaw(previewCards[0]);
       startLoop();
     }).catch(() => setStatus("Failed to load combined sheet."));
+  }
+
+  function hydrateFromSaved(card, saved) {
+    card.frames = saved.frames;
+    card.frameW = saved.frameW;
+    card.frameH = saved.frameH;
+    card.offsetX = saved.offsetX;
+    card.offsetY = saved.offsetY;
+    card.gapX = saved.gapX || 0;
+    card.perFrame = !!saved.perFrame;
+    card.frameRects = saved.perFrame && Array.isArray(saved.frameRects)
+      ? saved.frameRects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }))
+      : null;
+    card.activeFrame = 0;
   }
 
   function makeCard(direction, url) {
@@ -378,7 +409,7 @@
     foot.className = "preview-foot";
     foot.innerHTML = `<div>${direction}</div><div class="frame-info">…</div>`;
 
-    // Per-card slice controls
+    // Per-card slice controls (uniform mode by default; per-frame mode opt-in).
     const tweak = document.createElement("div");
     tweak.className = "preview-tweak";
     tweak.innerHTML = `
@@ -392,25 +423,32 @@
       <span class="save-badge" aria-live="polite"></span>
     `;
 
+    // Per-frame mode controls — only meaningful when toggled on.
+    const pfRow = document.createElement("div");
+    pfRow.className = "preview-tweak-pf";
+    pfRow.innerHTML = `
+      <label class="pf-toggle" title="Edit each frame's rect individually instead of using a uniform stride.">
+        <input type="checkbox" data-k="perFrame" />
+        <span>Per-frame slice</span>
+      </label>
+      <label class="pf-active">
+        <span>Frame</span>
+        <select data-k="activeFrame"></select>
+      </label>
+    `;
+
     const card = {
       el, canvas, ctx: canvas.getContext("2d"),
-      foot, tweak, direction, url,
+      foot, tweak, pfRow, direction, url,
       sheet: null,
       frameW: 1, frameH: 1, offsetX: 0, offsetY: 0, gapX: 0, frames: state.frames,
+      perFrame: false, frameRects: null, activeFrame: 0,
       row: 0,
     };
 
-    // Wire the input listeners
+    // Wire the uniform / W/H/X/Y inputs.
     tweak.querySelectorAll("input").forEach((inp) => {
-      inp.addEventListener("input", () => {
-        const k = inp.dataset.k;
-        const v = Math.max(parseInt(inp.min, 10) || 0, parseInt(inp.value, 10) || 0);
-        card[k] = v;
-        if (k === "frameW" || k === "frameH") sizePreviewCanvas(card);
-        updateCardMeta(card);
-        if (card === previewCards[state.activeIndex]) drawSheetOverlay();
-        scheduleSave(card);
-      });
+      inp.addEventListener("input", () => onCardInput(card, inp));
     });
     tweak.querySelector(".t-reset").addEventListener("click", () => {
       resetCard(card);
@@ -418,25 +456,141 @@
       delete state.savedSlices[card.url];
     });
 
+    // Per-frame toggle / active-frame selector.
+    pfRow.querySelector('[data-k="perFrame"]').addEventListener("change", (e) => {
+      togglePerFrame(card, e.target.checked);
+    });
+    pfRow.querySelector('[data-k="activeFrame"]').addEventListener("change", (e) => {
+      card.activeFrame = clamp(parseInt(e.target.value, 10) || 0, 0, card.frames - 1);
+      writeInputsFrom(card);
+      if (card === previewCards[state.activeIndex]) drawSheetOverlay();
+    });
+
     el.addEventListener("click", () => focusCard(card));
     el.addEventListener("focus", () => focusCard(card));
 
-    el.append(label, wrap, foot, tweak);
+    el.append(label, wrap, foot, tweak, pfRow);
     return card;
+  }
+
+  function onCardInput(card, inp) {
+    const k = inp.dataset.k;
+    const raw = parseInt(inp.value, 10);
+    const minV = parseInt(inp.min, 10) || 0;
+    const v = Math.max(minV, Number.isFinite(raw) ? raw : minV);
+
+    if (k === "frames") {
+      card.frames = Math.max(1, v);
+      ensureFrameRectsShape(card);
+      rebuildActiveFrameSelect(card);
+    } else if (card.perFrame && card.frameRects && k !== "gapX") {
+      // In per-frame mode, W/H/X/Y edit the active frame's rect instead of
+      // the uniform stride. (gapX is meaningless when each frame has its own
+      // explicit position.)
+      const r = card.frameRects[card.activeFrame];
+      if (!r) return;
+      if (k === "frameW") r.w = Math.max(1, v);
+      else if (k === "frameH") r.h = Math.max(1, v);
+      else if (k === "offsetX") r.x = Math.max(0, v);
+      else if (k === "offsetY") r.y = Math.max(0, v);
+    } else {
+      card[k] = v;
+    }
+
+    sizePreviewCanvas(card);
+    updateCardMeta(card);
+    if (card === previewCards[state.activeIndex]) drawSheetOverlay();
+    scheduleSave(card);
+  }
+
+  function togglePerFrame(card, on) {
+    card.perFrame = !!on;
+    if (card.perFrame) {
+      // Initialize from the uniform slice if there's no existing per-frame data.
+      if (!Array.isArray(card.frameRects) || card.frameRects.length !== card.frames) {
+        card.frameRects = [];
+        for (let i = 0; i < card.frames; i++) {
+          card.frameRects.push({
+            x: card.offsetX + i * (card.frameW + card.gapX),
+            y: card.offsetY,
+            w: card.frameW,
+            h: card.frameH,
+          });
+        }
+      }
+      card.activeFrame = 0;
+    }
+    rebuildActiveFrameSelect(card);
+    writeInputsFrom(card);
+    sizePreviewCanvas(card);
+    updateCardMeta(card);
+    if (card === previewCards[state.activeIndex]) drawSheetOverlay();
+    saveSlice(card);
+  }
+
+  function ensureFrameRectsShape(card) {
+    if (!card.perFrame) {
+      card.activeFrame = 0;
+      return;
+    }
+    if (!Array.isArray(card.frameRects)) card.frameRects = [];
+    while (card.frameRects.length < card.frames) {
+      const last = card.frameRects[card.frameRects.length - 1] ||
+        { x: card.offsetX, y: card.offsetY, w: card.frameW, h: card.frameH };
+      card.frameRects.push({
+        x: last.x + last.w,
+        y: last.y,
+        w: last.w,
+        h: last.h,
+      });
+    }
+    if (card.frameRects.length > card.frames) card.frameRects.length = card.frames;
+    card.activeFrame = clamp(card.activeFrame || 0, 0, card.frames - 1);
+  }
+
+  function rebuildActiveFrameSelect(card) {
+    const sel = card.pfRow.querySelector('[data-k="activeFrame"]');
+    sel.innerHTML = "";
+    for (let i = 0; i < card.frames; i++) {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = `${i} of ${card.frames - 1}`;
+      sel.appendChild(o);
+    }
+    sel.value = String(card.activeFrame);
+    sel.disabled = !card.perFrame;
+    card.pfRow.querySelector('[data-k="perFrame"]').checked = !!card.perFrame;
+    card.pfRow.classList.toggle("is-on", !!card.perFrame);
   }
 
   function writeInputsFrom(card) {
     card.tweak.querySelector('[data-k="frames"]').value = card.frames;
-    card.tweak.querySelector('[data-k="frameW"]').value = card.frameW;
-    card.tweak.querySelector('[data-k="frameH"]').value = card.frameH;
-    card.tweak.querySelector('[data-k="offsetX"]').value = card.offsetX;
-    card.tweak.querySelector('[data-k="offsetY"]').value = card.offsetY;
-    card.tweak.querySelector('[data-k="gapX"]').value = card.gapX;
+    if (card.perFrame && card.frameRects && card.frameRects[card.activeFrame]) {
+      const r = card.frameRects[card.activeFrame];
+      card.tweak.querySelector('[data-k="frameW"]').value = r.w;
+      card.tweak.querySelector('[data-k="frameH"]').value = r.h;
+      card.tweak.querySelector('[data-k="offsetX"]').value = r.x;
+      card.tweak.querySelector('[data-k="offsetY"]').value = r.y;
+    } else {
+      card.tweak.querySelector('[data-k="frameW"]').value = card.frameW;
+      card.tweak.querySelector('[data-k="frameH"]').value = card.frameH;
+      card.tweak.querySelector('[data-k="offsetX"]').value = card.offsetX;
+      card.tweak.querySelector('[data-k="offsetY"]').value = card.offsetY;
+    }
+    const gapInp = card.tweak.querySelector('[data-k="gapX"]');
+    gapInp.value = card.gapX;
+    gapInp.disabled = !!card.perFrame;
+    gapInp.title = card.perFrame
+      ? "Disabled — per-frame rects encode their own positions."
+      : "Horizontal gap between frames";
   }
 
   function resetCard(card) {
     if (!card.sheet) return;
     card.gapX = 0;
+    card.perFrame = false;
+    card.frameRects = null;
+    card.activeFrame = 0;
     if (typeof card.row === "number" && card.row > 0) {
       // combined sheet card
       card.frameW = Math.max(1, Math.floor(card.sheet.naturalWidth / state.frames));
@@ -457,6 +611,7 @@
       card.offsetY = 0;
     }
     card.frames = state.frames;
+    rebuildActiveFrameSelect(card);
     writeInputsFrom(card);
     sizePreviewCanvas(card);
     updateCardMeta(card);
@@ -471,13 +626,26 @@
     showRaw(card);
   }
 
+  // Used by both render + preview canvas sizing. In per-frame mode the canvas
+  // is sized to the largest frame so every frame fits without clipping.
+  function previewBounds(card) {
+    if (card.perFrame && card.frameRects?.length) {
+      let w = 1, h = 1;
+      for (const r of card.frameRects) {
+        if (r.w > w) w = r.w;
+        if (r.h > h) h = r.h;
+      }
+      return { w, h };
+    }
+    return { w: Math.max(1, card.frameW), h: Math.max(1, card.frameH) };
+  }
+
   function sizePreviewCanvas(card) {
-    const w = Math.max(1, card.frameW);
-    const h = Math.max(1, card.frameH);
-    card.canvas.width = w;
-    card.canvas.height = h;
-    card.canvas.style.width = `${w * state.scale}px`;
-    card.canvas.style.height = `${h * state.scale}px`;
+    const b = previewBounds(card);
+    card.canvas.width = b.w;
+    card.canvas.height = b.h;
+    card.canvas.style.width = `${b.w * state.scale}px`;
+    card.canvas.style.height = `${b.h * state.scale}px`;
     card.ctx.imageSmoothingEnabled = false;
   }
 
@@ -485,9 +653,15 @@
     if (!card.sheet) return;
     const sw = card.sheet.naturalWidth;
     const sh = card.sheet.naturalHeight;
-    const gap = card.gapX ? ` +${card.gapX}gap` : "";
-    card.foot.querySelector(".frame-info").textContent =
-      `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap}`;
+    if (card.perFrame && card.frameRects) {
+      const r = card.frameRects[card.activeFrame] || { x: 0, y: 0, w: 0, h: 0 };
+      card.foot.querySelector(".frame-info").textContent =
+        `sheet ${sw}×${sh} · per-frame · editing #${card.activeFrame} ${r.w}×${r.h} @ (${r.x},${r.y})`;
+    } else {
+      const gap = card.gapX ? ` +${card.gapX}gap` : "";
+      card.foot.querySelector(".frame-info").textContent =
+        `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap}`;
+    }
   }
 
   function startLoop() {
@@ -507,9 +681,16 @@
         if (!c.sheet) continue;
         const idx = frameIndex % Math.max(1, c.frames);
         c.ctx.clearRect(0, 0, c.canvas.width, c.canvas.height);
-        const sx = c.offsetX + idx * (c.frameW + c.gapX);
-        const sy = c.offsetY;
-        c.ctx.drawImage(c.sheet, sx, sy, c.frameW, c.frameH, 0, 0, c.frameW, c.frameH);
+        let sx, sy, sw, sh;
+        if (c.perFrame && c.frameRects && c.frameRects[idx]) {
+          ({ x: sx, y: sy, w: sw, h: sh } = c.frameRects[idx]);
+        } else {
+          sx = c.offsetX + idx * (c.frameW + c.gapX);
+          sy = c.offsetY;
+          sw = c.frameW;
+          sh = c.frameH;
+        }
+        c.ctx.drawImage(c.sheet, sx, sy, sw, sh, 0, 0, sw, sh);
       }
       drawSheetOverlay(frameIndex);
       rafId = requestAnimationFrame(tick);
@@ -543,60 +724,94 @@
 
   function updateRawMeta(card) {
     if (!card) return;
-    const gap = card.gapX ? ` +${card.gapX}gap` : "";
-    sheetMeta.textContent =
-      `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
-      `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap} · ${card.frames} frames · ` +
-      `${state.rawZoom}× zoom`;
+    if (card.perFrame && card.frameRects) {
+      const r = card.frameRects[card.activeFrame] || { x: 0, y: 0, w: 0, h: 0 };
+      sheetMeta.textContent =
+        `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
+        `per-frame mode · editing frame ${card.activeFrame}/${card.frames - 1} ` +
+        `${r.w}×${r.h} @ (${r.x},${r.y}) · ${state.rawZoom}× zoom`;
+    } else {
+      const gap = card.gapX ? ` +${card.gapX}gap` : "";
+      sheetMeta.textContent =
+        `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
+        `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap} · ${card.frames} frames · ` +
+        `${state.rawZoom}× zoom`;
+    }
   }
 
   function drawSheetOverlay(frameIndex = 0) {
     const card = previewCards[state.activeIndex];
     if (!card || !card.sheet) return;
-    if (sheetImg.src.indexOf(card.url.split("/").pop()) === -1) return;
+    if (sheetImg.src.indexOf(card.url.split("/").pop().split("#")[0]) === -1) return;
 
     const ctx = sheetOverlay.getContext("2d");
     const w = sheetOverlay.width;
     const h = sheetOverlay.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Faint per-frame grid for the active card's slice settings (handles gaps)
-    ctx.strokeStyle = "rgba(246,228,163,0.45)";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < card.frames; i++) {
-      const x = card.offsetX + i * (card.frameW + card.gapX);
-      ctx.strokeRect(x + 0.5, card.offsetY + 0.5, card.frameW - 1, card.frameH - 1);
-    }
-    // Faintly shade the gap regions so they're visible
-    if (card.gapX > 0) {
-      ctx.fillStyle = "rgba(140, 220, 255, 0.12)";
-      for (let i = 0; i < card.frames - 1; i++) {
-        const x = card.offsetX + i * (card.frameW + card.gapX) + card.frameW;
-        ctx.fillRect(x, card.offsetY, card.gapX, card.frameH);
+    if (card.perFrame && card.frameRects) {
+      // Faint per-frame rectangles
+      ctx.strokeStyle = "rgba(246,228,163,0.45)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < card.frameRects.length; i++) {
+        const r = card.frameRects[i];
+        ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
       }
-    }
-
-    // Highlight the currently-playing frame
-    const idx = frameIndex % Math.max(1, card.frames);
-    ctx.strokeStyle = "#ffd76b";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(
-      card.offsetX + idx * (card.frameW + card.gapX) + 1,
-      card.offsetY + 1,
-      card.frameW - 2,
-      card.frameH - 2
-    );
-
-    // Live drag rectangle + ghost preview of the N repeats stepping right
-    if (state.drag) {
-      const r = normalizeDrag(state.drag);
-      const stride = r.w + card.gapX;
-      ctx.strokeStyle = "rgba(140, 220, 255, 0.45)";
+      // Cyan: actively-being-edited frame
+      const editR = card.frameRects[card.activeFrame];
+      if (editR) {
+        ctx.strokeStyle = "#7fdcff";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(editR.x + 1, editR.y + 1, editR.w - 2, editR.h - 2);
+        ctx.setLineDash([]);
+      }
+      // Gold: currently-playing frame
+      const playR = card.frameRects[frameIndex % Math.max(1, card.frames)];
+      if (playR) {
+        ctx.strokeStyle = "#ffd76b";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(playR.x + 1, playR.y + 1, playR.w - 2, playR.h - 2);
+      }
+    } else {
+      // Uniform mode — original grid + gap shading + active frame highlight
+      ctx.strokeStyle = "rgba(246,228,163,0.45)";
       ctx.lineWidth = 1;
       for (let i = 0; i < card.frames; i++) {
-        const x = r.x + i * stride;
-        if (x + r.w > w) break;
-        ctx.strokeRect(x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+        const x = card.offsetX + i * (card.frameW + card.gapX);
+        ctx.strokeRect(x + 0.5, card.offsetY + 0.5, card.frameW - 1, card.frameH - 1);
+      }
+      if (card.gapX > 0) {
+        ctx.fillStyle = "rgba(140, 220, 255, 0.12)";
+        for (let i = 0; i < card.frames - 1; i++) {
+          const x = card.offsetX + i * (card.frameW + card.gapX) + card.frameW;
+          ctx.fillRect(x, card.offsetY, card.gapX, card.frameH);
+        }
+      }
+      const idx = frameIndex % Math.max(1, card.frames);
+      ctx.strokeStyle = "#ffd76b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        card.offsetX + idx * (card.frameW + card.gapX) + 1,
+        card.offsetY + 1,
+        card.frameW - 2,
+        card.frameH - 2
+      );
+    }
+
+    // Live drag rectangle + ghost preview of the N repeats stepping right.
+    // In per-frame mode, no ghosts — drag only updates the active frame.
+    if (state.drag) {
+      const r = normalizeDrag(state.drag);
+      if (!card.perFrame) {
+        const stride = r.w + card.gapX;
+        ctx.strokeStyle = "rgba(140, 220, 255, 0.45)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < card.frames; i++) {
+          const x = r.x + i * stride;
+          if (x + r.w > w) break;
+          ctx.strokeRect(x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+        }
       }
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = "#7fdcff";
@@ -639,8 +854,14 @@
     const p = eventToImagePx(e);
     state.drag.x1 = p.x; state.drag.y1 = p.y;
     const r = normalizeDrag(state.drag);
-    sheetMeta.textContent =
-      `dragging · slice would be ${r.w}×${r.h} @ (${r.x},${r.y}) · ${previewCards[state.activeIndex]?.frames || 0} frames`;
+    const card = previewCards[state.activeIndex];
+    if (card?.perFrame) {
+      sheetMeta.textContent =
+        `dragging frame ${card.activeFrame} · would be ${r.w}×${r.h} @ (${r.x},${r.y})`;
+    } else {
+      sheetMeta.textContent =
+        `dragging · slice would be ${r.w}×${r.h} @ (${r.x},${r.y}) · ${card?.frames || 0} frames`;
+    }
     drawSheetOverlay();
   });
   window.addEventListener("mouseup", () => {
@@ -649,10 +870,17 @@
     state.drag = null;
     const card = previewCards[state.activeIndex];
     if (card && r.w >= 2 && r.h >= 2) {
-      card.frameW = r.w;
-      card.frameH = r.h;
-      card.offsetX = r.x;
-      card.offsetY = r.y;
+      if (card.perFrame && card.frameRects) {
+        const fr = card.frameRects[card.activeFrame];
+        if (fr) {
+          fr.x = r.x; fr.y = r.y; fr.w = r.w; fr.h = r.h;
+        }
+      } else {
+        card.frameW = r.w;
+        card.frameH = r.h;
+        card.offsetX = r.x;
+        card.offsetY = r.y;
+      }
       writeInputsFrom(card);
       sizePreviewCanvas(card);
       updateCardMeta(card);

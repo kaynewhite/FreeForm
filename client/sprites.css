@@ -243,6 +243,63 @@
   color: #e07070;
 }
 
+/* Per-frame slice controls — opt-in per spritesheet. */
+.preview-tweak-pf {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem 0.6rem;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed rgba(217,166,74,0.25);
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  align-items: center;
+}
+.preview-tweak-pf .pf-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.preview-tweak-pf .pf-toggle input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: #d9a64a;
+  margin: 0;
+}
+.preview-tweak-pf .pf-active {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.preview-tweak-pf .pf-active select {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+  outline: none;
+}
+.preview-tweak-pf .pf-active select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.preview-tweak-pf.is-on {
+  color: #ffe9a8;
+}
+.preview-tweak input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .raw-head {
   display: flex;
   justify-content: space-between;

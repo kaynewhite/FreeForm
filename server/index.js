@@ -10,6 +10,7 @@ const { pool } = require("./db");
 const { router: authRouter, requireAuth } = require("./auth");
 const charactersRouter = require("./characters");
 const { router: spritesRouter, ensureSchema: ensureSpriteSchema } = require("./sprites");
+const { router: mapsRouter } = require("./maps");
 const { ensureCoreSchema } = require("./schema");
 const { seedAdmin } = require("./seed");
 
@@ -63,6 +64,7 @@ function requireAdmin(req, res, next) {
 app.use("/api/auth", authRouter);
 app.use("/api/characters", charactersRouter);
 app.use("/api/sprites", requireAdmin, spritesRouter);
+app.use("/api/maps", requireAdmin, mapsRouter);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });

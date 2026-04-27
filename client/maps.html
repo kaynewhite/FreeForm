@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreeForm · Map Workshop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/sprites.css" />
+  <link rel="stylesheet" href="/maps.css" />
+</head>
+<body class="sandbox-body">
+  <div class="bg-vignette"></div>
+
+  <main class="sandbox-shell">
+    <header class="sandbox-head">
+      <a href="/" class="back-link">← Back to character</a>
+      <h1>Map Workshop <span class="sub">— terrain forge</span></h1>
+      <span class="role-badge is-admin">Admin Only</span>
+    </header>
+
+    <p class="sandbox-flavor">
+      Upload Tiled .tmx maps with their .tsx tilesets and tileset images.
+      Files are stored on disk in <code>data/maps/&lt;name&gt;/</code> so they
+      survive every restart. Pick a map below to render it on the canvas.
+    </p>
+
+    <section class="sandbox-controls tome">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+
+      <h2 class="card-title">Upload a map bundle</h2>
+      <p class="ctrl-hint">
+        Pick a TMX file plus the TSX tilesets it references and the tileset
+        PNG images. They'll all be stored together so the relative paths
+        inside the TMX/TSX work.
+      </p>
+      <form id="upload-form" class="upload-form">
+        <label class="ctrl">
+          <span>Map name</span>
+          <input id="upload-name" type="text" required minlength="1" maxlength="64" placeholder="overworld, forge_arena, …" />
+        </label>
+        <label class="ctrl">
+          <span>Files (.tmx, .tsx, .png, .jpg)</span>
+          <input id="upload-files" type="file" required multiple accept=".tmx,.tsx,.png,.jpg,.jpeg" />
+        </label>
+        <button type="submit" class="primary">
+          <span class="btn-flame"></span>
+          <span class="btn-text">Upload</span>
+        </button>
+      </form>
+      <p class="form-msg" id="upload-msg"></p>
+    </section>
+
+    <section class="sandbox-controls tome">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+
+      <h2 class="card-title">Stored maps</h2>
+      <div class="map-list" id="map-list">
+        <p class="ctrl-hint">No maps uploaded yet.</p>
+      </div>
+    </section>
+
+    <section class="sheet-raw tome" id="viewer-section" hidden>
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+
+      <div class="raw-head">
+        <h2 class="card-title">
+          Viewer · <span id="viewer-title">—</span>
+        </h2>
+        <div class="raw-tools">
+          <label class="ctrl">
+            <span>Zoom</span>
+            <input id="viewer-zoom" type="range" min="1" max="6" step="1" value="2" />
+          </label>
+          <button id="viewer-close" class="link-btn" type="button">Close</button>
+        </div>
+      </div>
+      <p class="ctrl-hint" id="viewer-meta">—</p>
+      <div class="sheet-frame">
+        <div class="sheet-stage" id="map-stage">
+          <canvas id="map-canvas"></canvas>
+        </div>
+      </div>
+      <div class="layer-toggles" id="layer-toggles"></div>
+    </section>
+
+    <p class="form-msg" id="status-msg"></p>
+  </main>
+
+  <script src="/maps.js"></script>
+</body>
+</html>

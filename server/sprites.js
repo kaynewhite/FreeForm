@@ -1,28 +1,27 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
-const { query } = require("./db");
+const store = require("./store");
 
 const router = express.Router();
 
 const SPRITE_ROOT = path.join(__dirname, "..", "client", "assets", "sprites", "admin", "base");
 const ANIMATIONS = ["idle", "walking", "attack", "cast", "death"];
+const SLICES_FILE = "sprite_slices.json";
 
-// Bootstrap the slice-config table. Idempotent — safe to run on every boot.
+// In-memory cache of the slice store, hydrated from data/sprite_slices.json
+// on boot. Every mutation writes the file atomically before responding so the
+// admin's edits survive any restart of the system.
+let slices = store.load(SLICES_FILE, {});
+
+function persist() {
+  store.save(SLICES_FILE, slices);
+}
+
+// Kept for backwards compatibility with index.js boot order. Slice data is
+// now file-backed (no DB schema needed).
 async function ensureSchema() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS sprite_slices (
-      url         TEXT        PRIMARY KEY,
-      frames      INTEGER     NOT NULL CHECK (frames     > 0),
-      frame_w     INTEGER     NOT NULL CHECK (frame_w    > 0),
-      frame_h     INTEGER     NOT NULL CHECK (frame_h    > 0),
-      offset_x    INTEGER     NOT NULL DEFAULT 0 CHECK (offset_x >= 0),
-      offset_y    INTEGER     NOT NULL DEFAULT 0 CHECK (offset_y >= 0),
-      gap_x       INTEGER     NOT NULL DEFAULT 0 CHECK (gap_x    >= 0),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_by  INTEGER     REFERENCES users(id) ON DELETE SET NULL
-    )
-  `);
+  /* no-op */
 }
 
 function parseFile(file, animation) {
@@ -35,24 +34,13 @@ function parseFile(file, animation) {
   const animKey = animation === "walking" ? "walk" : animation;
   const dirPart = tail.startsWith(animKey) ? tail.slice(animKey.length) : "";
 
+  // Death is always a single non-directional strip — one row of frames.
   if (animation === "death") return { file, weapon, direction: null, combined: false };
   if (dirPart === "UpLeftDownRight") return { file, weapon, direction: null, combined: true };
   if (["Up", "Down", "Left", "Right"].includes(dirPart)) {
     return { file, weapon, direction: dirPart.toLowerCase(), combined: false };
   }
   return null;
-}
-
-function rowToSlice(r) {
-  return {
-    frames: r.frames,
-    frameW: r.frame_w,
-    frameH: r.frame_h,
-    offsetX: r.offset_x,
-    offsetY: r.offset_y,
-    gapX: r.gap_x,
-    updatedAt: r.updated_at,
-  };
 }
 
 router.get("/manifest", (_req, res) => {
@@ -80,30 +68,24 @@ router.get("/manifest", (_req, res) => {
   res.json({ root: "/assets/sprites/admin/base", animations: out });
 });
 
-// Return every saved slice as { url: { frames, frameW, frameH, offsetX, offsetY, gapX } }.
-// Includes synthetic "<url>#row=N" keys for combined sheets where each row of
-// directions has its own slice.
-router.get("/slices", async (_req, res) => {
-  try {
-    const r = await query(`SELECT * FROM sprite_slices`);
-    const out = {};
-    for (const row of r.rows) out[row.url] = rowToSlice(row);
-    res.json(out);
-  } catch (err) {
-    console.error("[sprites] load slices failed:", err);
-    res.status(500).json({ error: "Load failed" });
-  }
+// Returns every saved slice keyed by URL (or "<url>#row=N" for combined sheets).
+router.get("/slices", (_req, res) => {
+  res.json(slices);
 });
 
-// Validate a slice payload. Returns either a normalized object or an error string.
+// Validate a slice payload. Returns either a normalized object or { error }.
+// Supports two modes:
+//   - uniform (default): every frame is at offset + i*(frameW + gapX)
+//   - per-frame (perFrame=true): each frame has its own {x,y,w,h} rect.
+//     This is opt-in per-spritesheet so most sheets stay clean.
 function normalizeSlice(body) {
   const url = typeof body.url === "string" ? body.url.trim() : "";
   if (!url.startsWith("/assets/sprites/admin/base/")) {
     return { error: "Invalid sprite URL" };
   }
-  const fields = ["frames", "frameW", "frameH", "offsetX", "offsetY", "gapX"];
+  const intFields = ["frames", "frameW", "frameH", "offsetX", "offsetY", "gapX"];
   const v = {};
-  for (const f of fields) {
+  for (const f of intFields) {
     const n = Number(body[f]);
     if (!Number.isFinite(n) || n < 0 || n > 100000 || !Number.isInteger(n)) {
       return { error: `Invalid ${f}` };
@@ -113,29 +95,46 @@ function normalizeSlice(body) {
   if (v.frames < 1 || v.frameW < 1 || v.frameH < 1) {
     return { error: "frames / frameW / frameH must be > 0" };
   }
-  return { url, ...v };
+
+  const perFrame = !!body.perFrame;
+  let frameRects = null;
+  if (perFrame) {
+    if (!Array.isArray(body.frameRects) || body.frameRects.length !== v.frames) {
+      return { error: "frameRects must be an array of length === frames" };
+    }
+    frameRects = [];
+    for (let i = 0; i < v.frames; i++) {
+      const r = body.frameRects[i] || {};
+      const x = Number(r.x), y = Number(r.y), w = Number(r.w), h = Number(r.h);
+      if (![x, y, w, h].every((n) => Number.isFinite(n) && Number.isInteger(n) && n >= 0 && n <= 100000)) {
+        return { error: `Invalid frameRects[${i}]` };
+      }
+      if (w < 1 || h < 1) return { error: `frameRects[${i}] must have w/h >= 1` };
+      frameRects.push({ x, y, w, h });
+    }
+  }
+  return { url, ...v, perFrame, frameRects };
 }
 
-router.put("/slice", async (req, res) => {
+router.put("/slice", (req, res) => {
   const n = normalizeSlice(req.body || {});
   if (n.error) return res.status(400).json({ error: n.error });
 
+  slices[n.url] = {
+    frames: n.frames,
+    frameW: n.frameW,
+    frameH: n.frameH,
+    offsetX: n.offsetX,
+    offsetY: n.offsetY,
+    gapX: n.gapX,
+    perFrame: n.perFrame,
+    frameRects: n.frameRects,
+    updatedAt: new Date().toISOString(),
+    updatedBy: req.session?.userId || null,
+  };
+
   try {
-    await query(
-      `INSERT INTO sprite_slices
-         (url, frames, frame_w, frame_h, offset_x, offset_y, gap_x, updated_by, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, NOW())
-       ON CONFLICT (url) DO UPDATE SET
-         frames=EXCLUDED.frames,
-         frame_w=EXCLUDED.frame_w,
-         frame_h=EXCLUDED.frame_h,
-         offset_x=EXCLUDED.offset_x,
-         offset_y=EXCLUDED.offset_y,
-         gap_x=EXCLUDED.gap_x,
-         updated_by=EXCLUDED.updated_by,
-         updated_at=NOW()`,
-      [n.url, n.frames, n.frameW, n.frameH, n.offsetX, n.offsetY, n.gapX, req.session.userId]
-    );
+    persist();
     res.json({ ok: true });
   } catch (err) {
     console.error("[sprites] save failed:", err);
@@ -143,13 +142,15 @@ router.put("/slice", async (req, res) => {
   }
 });
 
-router.delete("/slice", async (req, res) => {
+router.delete("/slice", (req, res) => {
   const url = (req.query.url || req.body?.url || "").toString().trim();
   if (!url.startsWith("/assets/sprites/admin/base/")) {
     return res.status(400).json({ error: "Invalid sprite URL" });
   }
+  if (!(url in slices)) return res.json({ ok: true });
+  delete slices[url];
   try {
-    await query(`DELETE FROM sprite_slices WHERE url = $1`, [url]);
+    persist();
     res.json({ ok: true });
   } catch (err) {
     console.error("[sprites] delete failed:", err);
