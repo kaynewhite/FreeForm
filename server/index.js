@@ -10,6 +10,7 @@ const { pool } = require("./db");
 const { router: authRouter, requireAuth } = require("./auth");
 const charactersRouter = require("./characters");
 const { router: spritesRouter, ensureSchema: ensureSpriteSchema } = require("./sprites");
+const { ensureCoreSchema } = require("./schema");
 const { seedAdmin } = require("./seed");
 
 const HOST = "0.0.0.0";
@@ -87,7 +88,8 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`[server] listening on http://${HOST}:${PORT}`);
-  ensureSpriteSchema()
+  ensureCoreSchema()
+    .then(() => ensureSpriteSchema())
     .then(() => seedAdmin())
     .catch((err) => console.error("[boot] startup task failed:", err));
 });
