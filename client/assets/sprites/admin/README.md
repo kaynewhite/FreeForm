@@ -1,53 +1,101 @@
 # Admin Sprite Sheets
 
-Drop your finished admin spritesheet PNGs into the subfolders below.
-Naming follows the same convention used in the design doc, section 23
-("Asset & Spritesheet Requirements"). The admin is *not* a race or class —
-they are their own thing — so all admin assets live under this folder
-instead of being spread across the per-race folders.
+The admin is **not a race or class** — they are their own thing — so all admin
+assets live under this folder instead of being spread across the per-race
+folders. See design doc §3.8 (Admin Class) and §26 (Asset & Spritesheet
+Requirements) for the full specification.
 
-## Layout
+## Folder Layout
 
 ```
 admin/
-  base/        ← base character sheet(s), no weapon drawn
-  weapons/     ← weapon overlays drawn on top of the base sheet
-  icons/       ← 32×32 inventory icons (one per weapon)
+  base/
+    idle-spritesheets/
+      no-weapon/                ← 4 files (one per direction)
+      with-<weapon>/            ← per-weapon overlays
+    walking-spritesheets/
+      no-weapon/
+      with-<weapon>/
+    attack-spritesheets/
+      no-weapon/
+      with-<weapon>/
+    cast-spritesheets/
+      no-weapon/
+      with-<weapon>/
+    death-spritesheets/
+      no-weapon/
+      with-<weapon>/
+  weapons/                      ← (reserved for future per-weapon prop sprites)
+  icons/                        ← 32×32 inventory icons
 ```
 
 ## Naming convention
 
-### `base/`
-Base character sheet, 32×32 frames, 80 frames per sheet
-(Idle / Walk / Attack / Cast / Death × 4 directions × 4 frames).
+### Per-direction sheets (4 files)
 
-- `admin.png` — single sheet if the admin has no gender variants
-- `admin_male.png` / `admin_female.png` — if you made gendered variants
+Used for animations where each direction has its own sheet:
 
-### `weapons/`
-Weapon overlays — 32×32 frames, 16 frames per sheet
-(4 directions × 4 attack frames). One file per weapon the admin can equip.
-Per the design doc the admin starts with **all five** starting weapons
-plus +8% movement speed (Voidborn bonus), so all of these belong here:
+```
+admin-<animation><Direction>-spritesheet.png                ← no weapon
+admin-<weapon>-<animation><Direction>-spritesheet.png       ← with weapon
+```
 
-- `admin_dagger.png`
-- `admin_club.png`
-- `admin_bow.png`
-- `admin_slingshot.png`
-- `admin_katana.png`
+Where `<Direction>` is one of `Up`, `Down`, `Left`, `Right` and `<animation>`
+is `idle`, `walk`, `attack`, `cast`. Examples:
 
-If you also made gendered overlays, suffix with `_male` / `_female`
-(e.g. `admin_dagger_male.png`).
+- `admin-idleDown-spritesheet.png`
+- `admin-dagger-walkUp-spritesheet.png`
+- `admin-club-attackLeft-spritesheet.png`
 
-### `icons/`
-32×32 PNG inventory icons, one per weapon — same names as above
-(`dagger.png`, `club.png`, `bow.png`, `slingshot.png`, `katana.png`),
-or whatever subset the admin needs in their inventory bar.
+### Combined sheets (single file)
 
-## Notes
+Used when all four directions are packed into one sheet:
 
-- These files are served as static assets at
-  `/assets/sprites/admin/<subfolder>/<file>` once the server is running.
-- The renderer (PixiJS, coming later) will load `base/` first, then
-  composite the active weapon from `weapons/` on top, exactly the way the
-  design doc describes for player characters in section 23.2.
+```
+admin-<weapon>-<animation>UpLeftDownRight-spritesheet.png
+```
+
+Examples:
+
+- `admin-katana-idleUpLeftDownRight-spritesheet.png`
+- `admin-sword-walkUpLeftDownRight-spritesheet.png`
+
+### Death sheets
+
+Death is non-directional (one sheet per weapon variant):
+
+- `admin-death-spritesheet.png`                 (no weapon)
+- `admin-<weapon>-death-spritesheet.png`        (with weapon)
+
+## Weapons currently supplied
+
+| Weapon | Folder |
+|--------|--------|
+| (none) | `no-weapon/` |
+| Dagger | `with-dagger/` |
+| Club | `with-club/` |
+| Bow | `with-bow/` |
+| Slingshot | `with-slingshot/` |
+| Katana | `with-katana/` |
+| Sword | `with-sword/` |
+| Staff | `with-staff/` |
+| Crossbow | `with-crossbow/` |
+| Mace | `with-mace/` |
+| Battle Axe | `with-battleaxe/` |
+| Greatsword | `with-greatsword/` |
+| Axe (Wood) | `with-axe/` |
+| Pickaxe | `with-pickaxe/` |
+
+Per the design doc the admin starts with all 5 starter weapons (Dagger, Club,
+Bow, Slingshot, Katana) and can equip the rest as well.
+
+## How they are served
+
+Anything in this folder is served as static content at:
+
+```
+/assets/sprites/admin/base/<animation>-spritesheets/<variant>/<file>.png
+```
+
+The renderer (PixiJS, coming next) will load the right sheet based on the
+admin's current `(animation, weapon, direction)` triple.

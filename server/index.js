@@ -9,6 +9,7 @@ const PgSession = require("connect-pg-simple")(session);
 const { pool } = require("./db");
 const { router: authRouter, requireAuth } = require("./auth");
 const charactersRouter = require("./characters");
+const { seedAdmin } = require("./seed");
 
 const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT) || 5000;
@@ -77,4 +78,5 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`[server] listening on http://${HOST}:${PORT}`);
+  seedAdmin().catch((err) => console.error("[seed] failed:", err));
 });

@@ -16,8 +16,9 @@ working implementation. Currently only the auth slice is built.
 - `server/characters.js` — `/api/characters` (forge, /me, /me/die)
 - `server/races.js` — race definitions and stat modifiers (Human, Orc, Elf, Crystalline, Voidborn)
 - `server/admin.js` — Admin character stat block per design doc §3.8 (no race/class)
+- `server/seed.js` — Idempotent admin user seed, runs on every boot. Configurable via `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars.
 - `client/` — static frontend (login, forge, character sheet)
-- `client/assets/sprites/admin/` — admin sprite sheets (base / weapons / icons)
+- `client/assets/sprites/admin/` — admin sprite sheets, organized by animation (idle/walk/attack/cast/death) and weapon variant (no-weapon + 13 weapon overlays)
 
 ## Database
 Tables created via SQL (no ORM yet):
