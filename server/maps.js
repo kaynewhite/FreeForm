@@ -10,7 +10,10 @@ const MAPS_DIR = path.join(store.DATA_DIR, "maps");
 fs.mkdirSync(MAPS_DIR, { recursive: true });
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
-const SAFE_FILE_RE = /^[A-Za-z0-9._-]+\.(tmx|tsx|png|jpg|jpeg)$/i;
+// Tileset uploads only: a .tsx file plus the image(s) it references. The
+// actual maps are built in-world via /command we and /command server_edit, so
+// no .tmx upload is ever needed here.
+const SAFE_FILE_RE = /^[A-Za-z0-9._-]+\.(tsx|png|jpg|jpeg)$/i;
 const MAX_FILE_BYTES = 32 * 1024 * 1024;
 
 function safeMapDir(name) {
@@ -32,7 +35,7 @@ const upload = multer({
   limits: { fileSize: MAX_FILE_BYTES, files: 64 },
   fileFilter: (_req, file, cb) => {
     if (!safeFileName(file.originalname)) {
-      return cb(new Error(`Filename rejected: ${file.originalname}. Only .tmx, .tsx, .png, .jpg files are allowed.`));
+      return cb(new Error(`Filename rejected: ${file.originalname}. Only .tsx, .png, .jpg files are allowed.`));
     }
     cb(null, true);
   },
@@ -131,9 +134,9 @@ router.get("/file/:name/:file", (req, res) => {
   if (!full.startsWith(dir + path.sep) || !fs.existsSync(full)) {
     return res.status(404).json({ error: "Not found" });
   }
-  // TMX / TSX should be served as text/xml so DOMParser is happy in the browser.
+  // TSX should be served as text/xml so DOMParser is happy in the browser.
   const ext = path.extname(file).toLowerCase();
-  if (ext === ".tmx" || ext === ".tsx") res.type("application/xml");
+  if (ext === ".tsx") res.type("application/xml");
   res.sendFile(full);
 });
 

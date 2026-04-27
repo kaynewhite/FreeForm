@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FreeForm · Map Workshop</title>
+  <title>FreeForm · Tileset Library</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
@@ -17,34 +17,37 @@
   <main class="sandbox-shell">
     <header class="sandbox-head">
       <a href="/" class="back-link">← Back to character</a>
-      <h1>Map Workshop <span class="sub">— terrain forge</span></h1>
+      <h1>Tileset Library <span class="sub">— terrain palette</span></h1>
       <span class="role-badge is-admin">Admin Only</span>
     </header>
 
     <p class="sandbox-flavor">
-      Upload Tiled .tmx maps with their .tsx tilesets and tileset images.
-      Files are stored on disk in <code>data/maps/&lt;name&gt;/</code> so they
-      survive every restart. Pick a map below to render it on the canvas.
+      Upload Tiled <code>.tsx</code> tilesets and the image they reference.
+      The actual maps are built in-world with <code>/command we</code> and
+      <code>/command server_edit</code> — this page is only for the tile
+      palette. Files live on disk in <code>data/maps/&lt;name&gt;/</code> so
+      they survive every restart.
     </p>
 
     <section class="sandbox-controls tome">
       <span class="corner tl"></span><span class="corner tr"></span>
       <span class="corner bl"></span><span class="corner br"></span>
 
-      <h2 class="card-title">Upload a map bundle</h2>
+      <h2 class="card-title">Upload a tileset</h2>
       <p class="ctrl-hint">
-        Pick a TMX file plus the TSX tilesets it references and the tileset
-        PNG images. They'll all be stored together so the relative paths
-        inside the TMX/TSX work.
+        Pick a <code>.tsx</code> file plus the image it references
+        (<code>.png</code> or <code>.jpg</code>). They'll be stored together
+        so the relative <code>&lt;image source="…"&gt;</code> path inside the
+        TSX resolves correctly.
       </p>
       <form id="upload-form" class="upload-form">
         <label class="ctrl">
-          <span>Map name</span>
-          <input id="upload-name" type="text" required minlength="1" maxlength="64" placeholder="overworld, forge_arena, …" />
+          <span>Tileset name</span>
+          <input id="upload-name" type="text" required minlength="1" maxlength="64" placeholder="grass_set, dungeon_walls, …" />
         </label>
         <label class="ctrl">
-          <span>Files (.tmx, .tsx, .png, .jpg)</span>
-          <input id="upload-files" type="file" required multiple accept=".tmx,.tsx,.png,.jpg,.jpeg" />
+          <span>Files (.tsx + .png/.jpg)</span>
+          <input id="upload-files" type="file" required multiple accept=".tsx,.png,.jpg,.jpeg" />
         </label>
         <button type="submit" class="primary">
           <span class="btn-flame"></span>
@@ -58,9 +61,9 @@
       <span class="corner tl"></span><span class="corner tr"></span>
       <span class="corner bl"></span><span class="corner br"></span>
 
-      <h2 class="card-title">Stored maps</h2>
+      <h2 class="card-title">Stored tilesets</h2>
       <div class="map-list" id="map-list">
-        <p class="ctrl-hint">No maps uploaded yet.</p>
+        <p class="ctrl-hint">No tilesets uploaded yet.</p>
       </div>
     </section>
 
@@ -70,12 +73,20 @@
 
       <div class="raw-head">
         <h2 class="card-title">
-          Viewer · <span id="viewer-title">—</span>
+          Tileset · <span id="viewer-title">—</span>
         </h2>
         <div class="raw-tools">
           <label class="ctrl">
             <span>Zoom</span>
             <input id="viewer-zoom" type="range" min="1" max="6" step="1" value="2" />
+          </label>
+          <label class="ctrl">
+            <span>Show grid</span>
+            <input id="viewer-grid" type="checkbox" checked />
+          </label>
+          <label class="ctrl">
+            <span>Show IDs</span>
+            <input id="viewer-ids" type="checkbox" />
           </label>
           <button id="viewer-close" class="link-btn" type="button">Close</button>
         </div>
@@ -86,7 +97,7 @@
           <canvas id="map-canvas"></canvas>
         </div>
       </div>
-      <div class="layer-toggles" id="layer-toggles"></div>
+      <p class="ctrl-hint" id="viewer-tile-info">Hover or click a tile to see its ID.</p>
     </section>
 
     <p class="form-msg" id="status-msg"></p>

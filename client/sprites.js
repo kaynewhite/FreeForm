@@ -92,6 +92,8 @@
       frameRects: card.perFrame
         ? card.frameRects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }))
         : null,
+      fps: card.fps,
+      scale: card.scale,
     };
   }
   function clonePayload(card) {
@@ -201,10 +203,27 @@
   weaponSel.addEventListener("change", () => { syncFromControls(); applyDefaultFrames(); rebuild(); });
   animSel.addEventListener("change", () => { syncFromControls(); applyDefaultFrames(); rebuild(); });
   framesInput.addEventListener("input", () => { syncFromControls(); rebuild(); });
-  fpsInput.addEventListener("input", syncFromControls);
+
+  // FPS + scale apply to the *active* card and are saved alongside its slice
+  // so the in-game animator can look them up later. Other cards keep whatever
+  // value they were last saved with — use "Apply slice to all directions" to
+  // propagate.
+  fpsInput.addEventListener("input", () => {
+    syncFromControls();
+    const card = previewCards[state.activeIndex];
+    if (!card) return;
+    card.fps = state.fps;
+    updateCardMeta(card);
+    scheduleSave(card);
+  });
   scaleInput.addEventListener("input", () => {
     syncFromControls();
-    for (const c of previewCards) sizePreviewCanvas(c);
+    const card = previewCards[state.activeIndex];
+    if (!card) return;
+    card.scale = state.scale;
+    sizePreviewCanvas(card);
+    updateCardMeta(card);
+    scheduleSave(card);
   });
   playToggle.addEventListener("change", syncFromControls);
 
@@ -230,6 +249,10 @@
       c.frameRects = src.perFrame
         ? src.frameRects.map((r) => ({ ...r }))
         : null;
+      // FPS + scale propagate too — directions in the same animation set
+      // almost always animate together at the same rate.
+      c.fps = src.fps;
+      c.scale = src.scale;
       c.activeFrame = 0;
       writeInputsFrom(c);
       sizePreviewCanvas(c);
@@ -315,13 +338,18 @@
           card.offsetY = 0;
           card.gapX = 0;
           card.frames = state.frames;
+          card.fps = state.fps;
+          card.scale = state.scale;
         }
         ensureFrameRectsShape(card);
         rebuildActiveFrameSelect(card);
         writeInputsFrom(card);
         sizePreviewCanvas(card);
         updateCardMeta(card);
-        if (card === previewCards[0]) showRaw(card);
+        if (card === previewCards[0]) {
+          showRaw(card);
+          syncGlobalsToCard(card);
+        }
         startLoop();
       }).catch(() => {
         card.el.classList.add("is-missing");
@@ -365,6 +393,8 @@
           card.offsetY = card.row * rowH;
           card.gapX = 0;
           card.frames = state.frames;
+          card.fps = state.fps;
+          card.scale = state.scale;
         }
         ensureFrameRectsShape(card);
         rebuildActiveFrameSelect(card);
@@ -373,6 +403,7 @@
         updateCardMeta(card);
       }
       showRaw(previewCards[0]);
+      syncGlobalsToCard(previewCards[0]);
       startLoop();
     }).catch(() => setStatus("Failed to load combined sheet."));
   }
@@ -388,7 +419,25 @@
     card.frameRects = saved.perFrame && Array.isArray(saved.frameRects)
       ? saved.frameRects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }))
       : null;
+    // Older slice files won't have fps/scale — fall back to the current
+    // global defaults so existing data still loads cleanly.
+    card.fps = Number.isInteger(saved.fps) ? saved.fps : state.fps;
+    card.scale = Number.isInteger(saved.scale) ? saved.scale : state.scale;
     card.activeFrame = 0;
+  }
+
+  // Push the active card's saved fps/scale into the global controls so the
+  // user sees what's actually persisted for the sheet they're looking at.
+  function syncGlobalsToCard(card) {
+    if (!card) return;
+    if (Number.isInteger(card.fps)) {
+      fpsInput.value = String(card.fps);
+      state.fps = card.fps;
+    }
+    if (Number.isInteger(card.scale)) {
+      scaleInput.value = String(card.scale);
+      state.scale = card.scale;
+    }
   }
 
   function makeCard(direction, url) {
@@ -591,6 +640,10 @@
     card.perFrame = false;
     card.frameRects = null;
     card.activeFrame = 0;
+    card.fps = state.fps;
+    card.scale = state.scale;
+    card.acc = 0;
+    card.frameIndex = 0;
     if (typeof card.row === "number" && card.row > 0) {
       // combined sheet card
       card.frameW = Math.max(1, Math.floor(card.sheet.naturalWidth / state.frames));
@@ -624,6 +677,7 @@
     state.activeIndex = idx;
     previewCards.forEach((c) => c.el.classList.toggle("is-active", c === card));
     showRaw(card);
+    syncGlobalsToCard(card);
   }
 
   // Used by both render + preview canvas sizing. In per-frame mode the canvas
@@ -642,10 +696,11 @@
 
   function sizePreviewCanvas(card) {
     const b = previewBounds(card);
+    const s = Math.max(1, card.scale || state.scale);
     card.canvas.width = b.w;
     card.canvas.height = b.h;
-    card.canvas.style.width = `${b.w * state.scale}px`;
-    card.canvas.style.height = `${b.h * state.scale}px`;
+    card.canvas.style.width = `${b.w * s}px`;
+    card.canvas.style.height = `${b.h * s}px`;
     card.ctx.imageSmoothingEnabled = false;
   }
 
@@ -653,33 +708,36 @@
     if (!card.sheet) return;
     const sw = card.sheet.naturalWidth;
     const sh = card.sheet.naturalHeight;
+    const tail = ` · ${card.fps || state.fps}fps · ${card.scale || state.scale}× scale`;
     if (card.perFrame && card.frameRects) {
       const r = card.frameRects[card.activeFrame] || { x: 0, y: 0, w: 0, h: 0 };
       card.foot.querySelector(".frame-info").textContent =
-        `sheet ${sw}×${sh} · per-frame · editing #${card.activeFrame} ${r.w}×${r.h} @ (${r.x},${r.y})`;
+        `sheet ${sw}×${sh} · per-frame · editing #${card.activeFrame} ${r.w}×${r.h} @ (${r.x},${r.y})${tail}`;
     } else {
       const gap = card.gapX ? ` +${card.gapX}gap` : "";
       card.foot.querySelector(".frame-info").textContent =
-        `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap}`;
+        `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap}${tail}`;
     }
   }
 
   function startLoop() {
     cancelAnimationFrame(rafId);
     let last = performance.now();
-    let frameIndex = 0;
-    let acc = 0;
     function tick(now) {
       const dt = (now - last) / 1000; last = now;
-      if (state.playing) acc += dt;
-      const interval = 1 / state.fps;
-      while (acc >= interval) {
-        acc -= interval;
-        frameIndex += 1;
-      }
       for (const c of previewCards) {
         if (!c.sheet) continue;
-        const idx = frameIndex % Math.max(1, c.frames);
+        // Each card advances at its own fps so previews honor saved rates.
+        if (!Number.isFinite(c.acc)) c.acc = 0;
+        if (!Number.isInteger(c.frameIndex)) c.frameIndex = 0;
+        if (state.playing) c.acc += dt;
+        const fps = Math.max(1, c.fps || state.fps);
+        const interval = 1 / fps;
+        while (c.acc >= interval) {
+          c.acc -= interval;
+          c.frameIndex += 1;
+        }
+        const idx = c.frameIndex % Math.max(1, c.frames);
         c.ctx.clearRect(0, 0, c.canvas.width, c.canvas.height);
         let sx, sy, sw, sh;
         if (c.perFrame && c.frameRects && c.frameRects[idx]) {
@@ -692,7 +750,8 @@
         }
         c.ctx.drawImage(c.sheet, sx, sy, sw, sh, 0, 0, sw, sh);
       }
-      drawSheetOverlay(frameIndex);
+      const active = previewCards[state.activeIndex];
+      drawSheetOverlay(active ? (active.frameIndex || 0) : 0);
       rafId = requestAnimationFrame(tick);
     }
     rafId = requestAnimationFrame(tick);

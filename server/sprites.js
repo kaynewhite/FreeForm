@@ -96,6 +96,16 @@ function normalizeSlice(body) {
     return { error: "frames / frameW / frameH must be > 0" };
   }
 
+  // FPS + scale are stored per-sheet so the in-game animation rate and render
+  // size are looked up by URL; both fall back to sensible defaults when the
+  // client doesn't send them (older clients or fresh uploads).
+  const fps = body.fps === undefined || body.fps === null ? 8 : Number(body.fps);
+  const scale = body.scale === undefined || body.scale === null ? 3 : Number(body.scale);
+  if (!Number.isInteger(fps) || fps < 1 || fps > 60) return { error: "Invalid fps" };
+  if (!Number.isInteger(scale) || scale < 1 || scale > 8) return { error: "Invalid scale" };
+  v.fps = fps;
+  v.scale = scale;
+
   const perFrame = !!body.perFrame;
   let frameRects = null;
   if (perFrame) {
@@ -129,6 +139,8 @@ router.put("/slice", (req, res) => {
     gapX: n.gapX,
     perFrame: n.perFrame,
     frameRects: n.frameRects,
+    fps: n.fps,
+    scale: n.scale,
     updatedAt: new Date().toISOString(),
     updatedBy: req.session?.userId || null,
   };
