@@ -9,7 +9,7 @@ const PgSession = require("connect-pg-simple")(session);
 const { pool } = require("./db");
 const { router: authRouter, requireAuth } = require("./auth");
 const charactersRouter = require("./characters");
-const spritesRouter = require("./sprites");
+const { router: spritesRouter, ensureSchema: ensureSpriteSchema } = require("./sprites");
 const { seedAdmin } = require("./seed");
 
 const HOST = "0.0.0.0";
@@ -87,5 +87,7 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`[server] listening on http://${HOST}:${PORT}`);
-  seedAdmin().catch((err) => console.error("[seed] failed:", err));
+  ensureSpriteSchema()
+    .then(() => seedAdmin())
+    .catch((err) => console.error("[boot] startup task failed:", err));
 });

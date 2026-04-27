@@ -4,6 +4,7 @@
   // ----- state -----
   const state = {
     manifest: null,
+    savedSlices: {}, // url → { frames, frameW, frameH, offsetX, offsetY, gapX }
     weapon: "no-weapon",
     animation: "idle",
     frames: 4,
@@ -53,6 +54,67 @@
     statusMsg.classList.toggle("is-good", !!good);
   }
 
+  // ----- persistence -----
+  // Per-card debounced save to /api/sprites/slice. Drag-end / reset / apply-all
+  // bypass the debounce and save (or delete) immediately.
+  const saveTimers = new WeakMap();
+  function scheduleSave(card, delay = 400) {
+    clearTimeout(saveTimers.get(card));
+    saveTimers.set(card, setTimeout(() => saveSlice(card), delay));
+  }
+  async function saveSlice(card) {
+    if (!card || !card.url || !card.sheet) return;
+    try {
+      const r = await fetch("/api/sprites/slice", {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: card.url,
+          frames: card.frames,
+          frameW: card.frameW,
+          frameH: card.frameH,
+          offsetX: card.offsetX,
+          offsetY: card.offsetY,
+          gapX: card.gapX,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      card.savedSlice = {
+        frames: card.frames, frameW: card.frameW, frameH: card.frameH,
+        offsetX: card.offsetX, offsetY: card.offsetY, gapX: card.gapX,
+      };
+      flashSaveBadge(card, "saved");
+    } catch (err) {
+      console.error("save slice failed", err);
+      flashSaveBadge(card, "save failed", true);
+    }
+  }
+  async function deleteSlice(card) {
+    if (!card || !card.url) return;
+    try {
+      const r = await fetch(`/api/sprites/slice?url=${encodeURIComponent(card.url)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!r.ok) throw new Error(await r.text());
+      card.savedSlice = null;
+      flashSaveBadge(card, "reset");
+    } catch (err) {
+      console.error("delete slice failed", err);
+      flashSaveBadge(card, "reset failed", true);
+    }
+  }
+  function flashSaveBadge(card, text, bad = false) {
+    const badge = card.tweak.querySelector(".save-badge");
+    if (!badge) return;
+    badge.textContent = text;
+    badge.classList.toggle("is-bad", bad);
+    badge.classList.add("is-visible");
+    clearTimeout(badge._t);
+    badge._t = setTimeout(() => badge.classList.remove("is-visible"), 1400);
+  }
+
   // ----- image cache -----
   const imageCache = new Map();
   function loadImage(url) {
@@ -67,17 +129,24 @@
     return p;
   }
 
-  // ----- manifest fetch -----
+  // ----- manifest + saved-slices fetch -----
   async function loadManifest() {
-    const r = await fetch("/api/sprites/manifest", { credentials: "same-origin" });
-    if (r.status === 401 || r.status === 403) {
+    const [mRes, sRes] = await Promise.all([
+      fetch("/api/sprites/manifest", { credentials: "same-origin" }),
+      fetch("/api/sprites/slices",   { credentials: "same-origin" }),
+    ]);
+    if (mRes.status === 401 || mRes.status === 403) {
       setStatus("Admins only — log in as the admin to view this page.");
       return;
     }
-    if (!r.ok) { setStatus("Failed to load manifest."); return; }
-    state.manifest = await r.json();
+    if (!mRes.ok) { setStatus("Failed to load manifest."); return; }
+    state.manifest = await mRes.json();
+    state.savedSlices = sRes.ok ? await sRes.json() : {};
     populateControls();
     rebuild();
+  }
+  function lookupSaved(url) {
+    return (state.savedSlices && state.savedSlices[url]) || null;
   }
 
   // ----- controls -----
@@ -152,7 +221,9 @@
       writeInputsFrom(c);
       sizePreviewCanvas(c);
       updateCardMeta(c);
+      saveSlice(c);
     }
+    saveSlice(src);
     setStatus("Applied slice to all directions.", true);
     setTimeout(() => setStatus(""), 1800);
   });
@@ -216,15 +287,22 @@
 
     for (const e of ordered) {
       const card = makeCard(useDirNames ? e.direction : "death", e.url);
+      const saved = lookupSaved(e.url);
+      card.savedSlice = saved;
       previewGrid.appendChild(card.el);
       previewCards.push(card);
       loadImage(e.url).then((img) => {
         card.sheet = img;
-        card.frameW = Math.max(1, Math.floor(img.naturalWidth / state.frames));
-        card.frameH = img.naturalHeight;
-        card.offsetX = 0;
-        card.offsetY = 0;
-        card.frames = state.frames;
+        if (saved) {
+          Object.assign(card, saved);
+        } else {
+          card.frameW = Math.max(1, Math.floor(img.naturalWidth / state.frames));
+          card.frameH = img.naturalHeight;
+          card.offsetX = 0;
+          card.offsetY = 0;
+          card.gapX = 0;
+          card.frames = state.frames;
+        }
         writeInputsFrom(card);
         sizePreviewCanvas(card);
         updateCardMeta(card);
@@ -248,8 +326,10 @@
   }
 
   function buildCombined(entry) {
+    // One image, but four directions each persisted separately. We key per-row
+    // saves with synthetic "#row=N" suffixes on the URL.
     for (let i = 0; i < 4; i++) {
-      const card = makeCard(COMBINED_ROW_ORDER[i], entry.url);
+      const card = makeCard(COMBINED_ROW_ORDER[i], `${entry.url}#row=${i}`);
       card.row = i;
       previewGrid.appendChild(card.el);
       previewCards.push(card);
@@ -259,11 +339,18 @@
       const frameW = Math.max(1, Math.floor(img.naturalWidth / state.frames));
       for (const card of previewCards) {
         card.sheet = img;
-        card.frameW = frameW;
-        card.frameH = rowH;
-        card.offsetX = 0;
-        card.offsetY = card.row * rowH;
-        card.frames = state.frames;
+        const saved = lookupSaved(card.url);
+        card.savedSlice = saved;
+        if (saved) {
+          Object.assign(card, saved);
+        } else {
+          card.frameW = frameW;
+          card.frameH = rowH;
+          card.offsetX = 0;
+          card.offsetY = card.row * rowH;
+          card.gapX = 0;
+          card.frames = state.frames;
+        }
         writeInputsFrom(card);
         sizePreviewCanvas(card);
         updateCardMeta(card);
@@ -301,7 +388,8 @@
       <label>X<input type="number" data-k="offsetX" min="0" /></label>
       <label>Y<input type="number" data-k="offsetY" min="0" /></label>
       <label title="Horizontal gap between frames">G<input type="number" data-k="gapX" min="0" /></label>
-      <button type="button" class="t-reset" title="Reset to auto-computed defaults">⟲</button>
+      <button type="button" class="t-reset" title="Reset to auto-computed defaults (deletes saved settings)">⟲</button>
+      <span class="save-badge" aria-live="polite"></span>
     `;
 
     const card = {
@@ -321,9 +409,14 @@
         if (k === "frameW" || k === "frameH") sizePreviewCanvas(card);
         updateCardMeta(card);
         if (card === previewCards[state.activeIndex]) drawSheetOverlay();
+        scheduleSave(card);
       });
     });
-    tweak.querySelector(".t-reset").addEventListener("click", () => resetCard(card));
+    tweak.querySelector(".t-reset").addEventListener("click", () => {
+      resetCard(card);
+      deleteSlice(card);
+      delete state.savedSlices[card.url];
+    });
 
     el.addEventListener("click", () => focusCard(card));
     el.addEventListener("focus", () => focusCard(card));
@@ -564,6 +657,7 @@
       sizePreviewCanvas(card);
       updateCardMeta(card);
       updateRawMeta(card);
+      saveSlice(card); // drag-end saves immediately
     }
     drawSheetOverlay();
   });

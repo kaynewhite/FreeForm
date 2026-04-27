@@ -225,6 +225,24 @@
   background: rgba(246,228,163,0.1);
 }
 
+.preview-tweak .save-badge {
+  align-self: end;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #7ad27a;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.preview-tweak .save-badge.is-visible {
+  opacity: 1;
+}
+.preview-tweak .save-badge.is-bad {
+  color: #e07070;
+}
+
 .raw-head {
   display: flex;
   justify-content: space-between;
