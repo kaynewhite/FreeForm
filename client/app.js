@@ -47,6 +47,7 @@
     }
     $("#sandbox-link").hidden = role !== "admin";
     $("#maps-link").hidden = role !== "admin";
+    $("#world-link").hidden = role !== "admin";
   }
 
   // ---- auth tabs / forms ----

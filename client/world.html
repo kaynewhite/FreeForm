@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Loom — FreeForm</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/sprites.css" />
+  <link rel="stylesheet" href="/world.css" />
+</head>
+<body>
+  <div class="bg-vignette"></div>
+
+  <main class="sandbox-shell">
+    <header class="sandbox-head">
+      <a class="link-btn" href="/index.html">← Back to character</a>
+      <h1>World Loom <span class="subtitle">— paint the realm</span></h1>
+      <span class="role-badge is-admin">Admin only</span>
+    </header>
+
+    <p class="intro">
+      Paint tiles into shard <code id="shard-name">default</code>. Pick a tileset and a tile,
+      then left-click on the canvas to paint, right-click to erase. Each click writes through
+      to <code>data/world/&lt;shard&gt;.json</code> immediately. Layer order = draw order
+      (top of list draws last).
+    </p>
+
+    <section class="tome world-tome">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+
+      <div class="world-toolbar">
+        <label class="ctrl">
+          <span>Layer</span>
+          <select id="layer-select"></select>
+        </label>
+        <label class="ctrl">
+          <span>Zoom</span>
+          <input type="range" id="zoom" min="1" max="6" step="1" value="2" />
+          <output id="zoom-out">2x</output>
+        </label>
+        <label class="ctrl checkbox">
+          <input type="checkbox" id="grid-toggle" checked />
+          <span>Grid</span>
+        </label>
+        <label class="ctrl checkbox">
+          <input type="checkbox" id="coords-toggle" />
+          <span>Coords</span>
+        </label>
+        <button class="ghost" id="recenter-btn" type="button">Recenter</button>
+        <button class="ghost danger" id="clear-layer-btn" type="button">Clear layer</button>
+        <span class="status" id="paint-status"></span>
+      </div>
+
+      <div class="world-stage" id="world-stage">
+        <canvas id="world-canvas" width="800" height="500"></canvas>
+        <div class="hover-readout" id="hover-readout">—</div>
+      </div>
+
+      <div class="rune-divider" aria-hidden="true">
+        <span class="rune">✦</span><span class="line"></span><span class="rune">❖</span><span class="line"></span><span class="rune">✦</span>
+      </div>
+
+      <h3 class="section-title">Tile palette</h3>
+      <p class="muted small">Selected: <span id="selected-readout">none — pick a tile below</span></p>
+      <div class="palette" id="palette">Loading tilesets…</div>
+    </section>
+
+    <p class="form-msg" id="status-msg"></p>
+  </main>
+
+  <script src="/world.js"></script>
+</body>
+</html>

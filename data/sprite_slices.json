@@ -21,7 +21,9 @@
         "h": 54
       }
     ],
-    "updatedAt": "2026-04-27T13:33:25.905Z",
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T16:32:11.627Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleLeft-spritesheet.png": {
@@ -46,7 +48,9 @@
         "h": 54
       }
     ],
-    "updatedAt": "2026-04-27T13:31:53.037Z",
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-27T16:32:00.732Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleRight-spritesheet.png": {
@@ -71,7 +75,9 @@
         "h": 54
       }
     ],
-    "updatedAt": "2026-04-27T13:32:42.891Z",
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T16:32:07.804Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleDown-spritesheet.png": {
@@ -176,6 +182,33 @@
     "fps": 8,
     "scale": 3,
     "updatedAt": "2026-04-27T13:49:02.452Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleDown-spritesheet.png": {
+    "frames": 2,
+    "frameW": 49,
+    "frameH": 53,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 34,
+        "h": 54
+      },
+      {
+        "x": 64,
+        "y": 0,
+        "w": 34,
+        "h": 54
+      }
+    ],
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-27T16:31:19.271Z",
     "updatedBy": 1
   }
 }
