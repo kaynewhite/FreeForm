@@ -145,6 +145,7 @@
       c.frameW = src.frameW;
       c.frameH = src.frameH;
       c.offsetX = src.offsetX;
+      c.gapX = src.gapX;
       // Combined sheets: keep each row's Y; per-direction sheets: copy Y too.
       if (c.sheet !== src.sheet) c.offsetY = src.offsetY;
       c.frames = src.frames;
@@ -299,6 +300,7 @@
       <label>H<input type="number" data-k="frameH" min="1" /></label>
       <label>X<input type="number" data-k="offsetX" min="0" /></label>
       <label>Y<input type="number" data-k="offsetY" min="0" /></label>
+      <label title="Horizontal gap between frames">G<input type="number" data-k="gapX" min="0" /></label>
       <button type="button" class="t-reset" title="Reset to auto-computed defaults">⟲</button>
     `;
 
@@ -306,7 +308,7 @@
       el, canvas, ctx: canvas.getContext("2d"),
       foot, tweak, direction, url,
       sheet: null,
-      frameW: 1, frameH: 1, offsetX: 0, offsetY: 0, frames: state.frames,
+      frameW: 1, frameH: 1, offsetX: 0, offsetY: 0, gapX: 0, frames: state.frames,
       row: 0,
     };
 
@@ -336,10 +338,12 @@
     card.tweak.querySelector('[data-k="frameH"]').value = card.frameH;
     card.tweak.querySelector('[data-k="offsetX"]').value = card.offsetX;
     card.tweak.querySelector('[data-k="offsetY"]').value = card.offsetY;
+    card.tweak.querySelector('[data-k="gapX"]').value = card.gapX;
   }
 
   function resetCard(card) {
     if (!card.sheet) return;
+    card.gapX = 0;
     if (typeof card.row === "number" && card.row > 0) {
       // combined sheet card
       card.frameW = Math.max(1, Math.floor(card.sheet.naturalWidth / state.frames));
@@ -388,8 +392,9 @@
     if (!card.sheet) return;
     const sw = card.sheet.naturalWidth;
     const sh = card.sheet.naturalHeight;
+    const gap = card.gapX ? ` +${card.gapX}gap` : "";
     card.foot.querySelector(".frame-info").textContent =
-      `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})`;
+      `sheet ${sw}×${sh} · slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap}`;
   }
 
   function startLoop() {
@@ -409,7 +414,7 @@
         if (!c.sheet) continue;
         const idx = frameIndex % Math.max(1, c.frames);
         c.ctx.clearRect(0, 0, c.canvas.width, c.canvas.height);
-        const sx = c.offsetX + idx * c.frameW;
+        const sx = c.offsetX + idx * (c.frameW + c.gapX);
         const sy = c.offsetY;
         c.ctx.drawImage(c.sheet, sx, sy, c.frameW, c.frameH, 0, 0, c.frameW, c.frameH);
       }
@@ -445,9 +450,10 @@
 
   function updateRawMeta(card) {
     if (!card) return;
+    const gap = card.gapX ? ` +${card.gapX}gap` : "";
     sheetMeta.textContent =
       `${card.direction.toUpperCase()} · ${sheetImg.naturalWidth}×${sheetImg.naturalHeight} px · ` +
-      `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY}) · ${card.frames} frames · ` +
+      `slice ${card.frameW}×${card.frameH} @ (${card.offsetX},${card.offsetY})${gap} · ${card.frames} frames · ` +
       `${state.rawZoom}× zoom`;
   }
 
@@ -461,31 +467,28 @@
     const h = sheetOverlay.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Faint frame grid for the active card's slice settings
+    // Faint per-frame grid for the active card's slice settings (handles gaps)
     ctx.strokeStyle = "rgba(246,228,163,0.45)";
     ctx.lineWidth = 1;
-    for (let i = 0; i <= card.frames; i++) {
-      const x = card.offsetX + i * card.frameW;
-      ctx.beginPath();
-      ctx.moveTo(x + 0.5, card.offsetY);
-      ctx.lineTo(x + 0.5, card.offsetY + card.frameH);
-      ctx.stroke();
+    for (let i = 0; i < card.frames; i++) {
+      const x = card.offsetX + i * (card.frameW + card.gapX);
+      ctx.strokeRect(x + 0.5, card.offsetY + 0.5, card.frameW - 1, card.frameH - 1);
     }
-    ctx.beginPath();
-    ctx.moveTo(card.offsetX, card.offsetY + 0.5);
-    ctx.lineTo(card.offsetX + card.frames * card.frameW, card.offsetY + 0.5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(card.offsetX, card.offsetY + card.frameH - 0.5);
-    ctx.lineTo(card.offsetX + card.frames * card.frameW, card.offsetY + card.frameH - 0.5);
-    ctx.stroke();
+    // Faintly shade the gap regions so they're visible
+    if (card.gapX > 0) {
+      ctx.fillStyle = "rgba(140, 220, 255, 0.12)";
+      for (let i = 0; i < card.frames - 1; i++) {
+        const x = card.offsetX + i * (card.frameW + card.gapX) + card.frameW;
+        ctx.fillRect(x, card.offsetY, card.gapX, card.frameH);
+      }
+    }
 
     // Highlight the currently-playing frame
     const idx = frameIndex % Math.max(1, card.frames);
     ctx.strokeStyle = "#ffd76b";
     ctx.lineWidth = 2;
     ctx.strokeRect(
-      card.offsetX + idx * card.frameW + 1,
+      card.offsetX + idx * (card.frameW + card.gapX) + 1,
       card.offsetY + 1,
       card.frameW - 2,
       card.frameH - 2
@@ -494,16 +497,14 @@
     // Live drag rectangle + ghost preview of the N repeats stepping right
     if (state.drag) {
       const r = normalizeDrag(state.drag);
-      // Ghost copies of what the new slice would look like
+      const stride = r.w + card.gapX;
       ctx.strokeStyle = "rgba(140, 220, 255, 0.45)";
       ctx.lineWidth = 1;
-      const repeats = card.frames;
-      for (let i = 0; i < repeats; i++) {
-        const x = r.x + i * r.w;
+      for (let i = 0; i < card.frames; i++) {
+        const x = r.x + i * stride;
         if (x + r.w > w) break;
         ctx.strokeRect(x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
       }
-      // The active drag rectangle, bright + dashed
       ctx.setLineDash([4, 3]);
       ctx.strokeStyle = "#7fdcff";
       ctx.lineWidth = 2;
