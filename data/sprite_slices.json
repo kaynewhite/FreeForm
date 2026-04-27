@@ -1,0 +1,102 @@
+{
+  "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleDown-spritesheet.png": {
+    "frames": 2,
+    "frameW": 32,
+    "frameH": 48,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 2,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 34,
+        "h": 54
+      },
+      {
+        "x": 64,
+        "y": 0,
+        "w": 34,
+        "h": 54
+      }
+    ],
+    "updatedAt": "2026-04-27T13:28:49.402Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleUp-spritesheet.png": {
+    "frames": 2,
+    "frameW": 34,
+    "frameH": 54,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 34,
+        "h": 54
+      },
+      {
+        "x": 64,
+        "y": 0,
+        "w": 34,
+        "h": 54
+      }
+    ],
+    "updatedAt": "2026-04-27T13:33:25.905Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleLeft-spritesheet.png": {
+    "frames": 2,
+    "frameW": 34,
+    "frameH": 53,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 29,
+        "h": 54
+      },
+      {
+        "x": 64,
+        "y": 0,
+        "w": 29,
+        "h": 54
+      }
+    ],
+    "updatedAt": "2026-04-27T13:31:53.037Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleRight-spritesheet.png": {
+    "frames": 2,
+    "frameW": 46,
+    "frameH": 53,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 29,
+        "h": 54
+      },
+      {
+        "x": 64,
+        "y": 0,
+        "w": 29,
+        "h": 54
+      }
+    ],
+    "updatedAt": "2026-04-27T13:32:42.891Z",
+    "updatedBy": 1
+  }
+}
