@@ -17,7 +17,8 @@ working implementation. Currently only the auth slice is built.
 
 ## Database
 Tables created via SQL (no ORM yet):
-- `users(id, email, username, password_hash, created_at, last_login_at)`
+- `users(id, email, password_hash, role, created_at, last_login_at)`
+- `characters(id, account_id, name, race, gender, mana_cap, max_hp, hp, level, xp, control, efficiency, cast_speed, resistance, stamina_cap, created_at, died_at)` with partial unique indexes `unique_living_char_name` and `one_living_char_per_account`
 - `session(sid, sess, expire)` — session store
 
 ## Run
