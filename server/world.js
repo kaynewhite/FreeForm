@@ -23,6 +23,12 @@ const TILE_REF_RE = /^([a-zA-Z0-9][a-zA-Z0-9_-]{0,63}):(\d+)$/;
 const COORD_MAX = 1 << 20; // ~±1 million tiles each direction
 const MAX_BATCH = 1024;
 const DEFAULT_LAYERS = ["ground", "decor"];
+// Every fresh shard starts as endless plain grass. The renderer fills any
+// tile that has no explicit ground entry with this reference, so a brand-new
+// world is walkable from the first frame and edits via /command we /
+// /command world_edit / /command server_edit only need to override what the
+// admin actually wants to change.
+const DEFAULT_GROUND = "grass:0";
 
 function shardPath(shard) {
   if (!SHARD_RE.test(shard)) return null;
@@ -36,6 +42,7 @@ function emptyShard(shard) {
   return {
     shard,
     tileSize: 16,
+    defaultGround: DEFAULT_GROUND,
     createdAt: now,
     updatedAt: now,
     layers: DEFAULT_LAYERS.map((name) => ({ name, tiles: {} })),
@@ -56,12 +63,26 @@ function loadShard(shard) {
         w.layers.push({ name, tiles: {} });
       }
     }
+    if (!w.defaultGround) w.defaultGround = DEFAULT_GROUND;
     return w;
   } catch (err) {
     if (err.code === "ENOENT") return emptyShard(shard);
     throw err;
   }
 }
+
+// Make sure the default shard exists on disk on boot so a freshly-imported
+// project always has a "plain grass ground" world ready for /command we.
+function ensureDefaultShard() {
+  const file = shardPath("default");
+  if (!file) return;
+  if (fs.existsSync(file)) return;
+  const w = emptyShard("default");
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+  fs.writeFileSync(tmp, JSON.stringify(w, null, 2), "utf8");
+  fs.renameSync(tmp, file);
+}
+ensureDefaultShard();
 
 function saveShard(w) {
   w.updatedAt = new Date().toISOString();
@@ -226,9 +247,12 @@ router.post("/:shard/clear-layer", (req, res) => {
   }
 });
 
-// Tileset metadata for the world editor UI. Returns the parsed TSX summary
-// for every uploaded tileset, plus the URL the editor should load the image
-// from (the existing /api/maps/file/... endpoint).
+// Tileset metadata for the in-game world editor (opened via /command we /
+// /command world_edit / /command server_edit). Returns the parsed TSX
+// summary for every uploaded tileset, plus the URL the client should load
+// the image from (the existing /api/maps/file/... endpoint). The in-game
+// palette UI is responsible for keeping itself screen-contained — only the
+// palette area scrolls, never the whole page.
 router.get("/_/tilesets", (_req, res) => {
   if (!fs.existsSync(MAPS_DIR)) return res.json({ tilesets: [] });
   const out = [];
