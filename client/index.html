@@ -321,12 +321,20 @@
       <button class="hb-slot is-locked" data-slot="0" type="button" disabled><span class="hb-key">0</span><span class="hb-lock">·</span></button>
     </div>
 
-    <!-- Chat / command rail -->
+    <!-- Chat / command rail. The header doubles as a collapse handle —
+         click anywhere on it to fold the panel down to just the title bar. -->
     <div class="realm-chat" id="realm-chat">
-      <div class="chat-log" id="chat-log"></div>
-      <form class="chat-input-row" id="chat-form">
-        <input type="text" id="chat-input" autocomplete="off" placeholder="Speak — or whisper a /command we" maxlength="200" />
-      </form>
+      <button type="button" class="chat-head" id="chat-head" title="Collapse / expand (chat history is preserved)">
+        <span class="chat-title">Voices</span>
+        <span class="chat-hint" id="chat-hint">T to speak</span>
+        <span class="chat-collapse" id="chat-collapse" aria-hidden="true">▾</span>
+      </button>
+      <div class="chat-body" id="chat-body">
+        <div class="chat-log" id="chat-log"></div>
+        <form class="chat-input-row" id="chat-form">
+          <input type="text" id="chat-input" autocomplete="off" placeholder="Speak — or whisper a /command we" maxlength="200" />
+        </form>
+      </div>
     </div>
 
     <!-- Editor palette overlay. Hidden by default. Toggled by slash command.

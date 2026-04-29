@@ -58,6 +58,18 @@
   const hbWeaponIcon = $("#hb-weapon-icon");
   const hbWeaponName = $("#hb-weapon-name");
 
+  // Output meter (scroll wheel adjusts in player mode; locked in editor mode).
+  const outputBox    = $("#realm-output");
+  const outFill      = $("#out-fill");
+  const outNum       = $("#out-num");
+
+  // Collapsible chat
+  const chatPanel    = $("#realm-chat");
+  const chatHead     = $("#chat-head");
+  const chatBody     = $("#chat-body");
+  const chatHint     = $("#chat-hint");
+  const chatCollapseGlyph = $("#chat-collapse");
+
   // Per-race weapon glyph for the hotbar slot icon. Vague enough to work in
   // any system font — real per-weapon art lands when we have spell sheets.
   const WEAPON_ICON = {
@@ -94,6 +106,123 @@
     return body;
   }
 
+  // ---- sprite registry ----
+  // Loads admin idle/walk sheets for all four facings, plus their slice
+  // metadata, so the in-realm avatar animates with real art instead of a
+  // placeholder circle. Players currently have no sheets uploaded — they
+  // will fall through to the circle renderer.
+  const SpriteSet = {
+    loaded: false,
+    slices: {},
+    sheets: { admin: { idle: {}, walk: {} } }, // sheets[role][anim][facing] = { img, slice }
+  };
+  function _loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("image failed: " + url));
+      img.src = url;
+    });
+  }
+  function _normalizeSlice(raw, img) {
+    if (!raw) return {
+      frames: 1, frameW: img.naturalWidth, frameH: img.naturalHeight,
+      offsetX: 0, offsetY: 0, gapX: 0,
+      perFrame: false, frameRects: null, fps: 8,
+    };
+    return {
+      frames: raw.frames || 1,
+      frameW: raw.frameW || img.naturalWidth,
+      frameH: raw.frameH || img.naturalHeight,
+      offsetX: raw.offsetX || 0,
+      offsetY: raw.offsetY || 0,
+      gapX: raw.gapX || 0,
+      perFrame: !!raw.perFrame,
+      frameRects: Array.isArray(raw.frameRects) ? raw.frameRects : null,
+      fps: Math.max(1, Math.min(60, raw.fps || 8)),
+    };
+  }
+  async function loadAdminSprites() {
+    if (SpriteSet.loaded) return;
+    try { SpriteSet.slices = await api("/api/sprites/slices") || {}; }
+    catch { SpriteSet.slices = {}; }
+    const ROOT = "/assets/sprites/admin/base";
+    const ANIMS = {
+      idle: `${ROOT}/idle-spritesheets/no-weapon/admin-idle`,
+      walk: `${ROOT}/walking-spritesheets/no-weapon/admin-walk`,
+    };
+    const DIRS = ["Up", "Down", "Left", "Right"];
+    await Promise.all(Object.entries(ANIMS).flatMap(([anim, prefix]) =>
+      DIRS.map(async (D) => {
+        const url = `${prefix}${D}-spritesheet.png`;
+        try {
+          const img = await _loadImage(url);
+          SpriteSet.sheets.admin[anim][D.toLowerCase()] = {
+            img,
+            slice: _normalizeSlice(SpriteSet.slices[url], img),
+            url,
+          };
+        } catch { /* skip missing files silently */ }
+      })
+    ));
+    SpriteSet.loaded = true;
+  }
+  function getSpriteForPlayer(p, anim) {
+    if (!p.isAdmin) return null;
+    const set = SpriteSet.sheets.admin[anim] || SpriteSet.sheets.admin.idle;
+    return set[p.facing] || set.down || null;
+  }
+
+  // ---- per-player render record (smooth-lerped visual position) ----
+  // The server pushes authoritative state at 20Hz. We keep a separate
+  // visual record per player and exponentially smooth it toward the target
+  // every frame. That kills the visible jitter on the 50ms tick boundary
+  // without needing real client-side prediction.
+  function ensureRenderRec(p) {
+    let rec = state.renderPlayers.get(p.id);
+    if (!rec) {
+      rec = {
+        id: p.id, name: p.name, isAdmin: !!p.isAdmin, race: p.race,
+        weapon: p.weapon || null,
+        x: p.x, y: p.y,            // visual (lerped) position
+        tx: p.x, ty: p.y,           // authoritative target
+        facing: p.facing || "down",
+        anim: p.anim || "idle",
+        animTime: 0,                // accumulator for sprite frame timing
+        bubble: null,               // { text, until }
+      };
+      state.renderPlayers.set(p.id, rec);
+      return rec;
+    }
+    rec.name = p.name ?? rec.name;
+    rec.isAdmin = !!(p.isAdmin ?? rec.isAdmin);
+    rec.race = p.race ?? rec.race;
+    rec.weapon = p.weapon ?? rec.weapon;
+    rec.tx = p.x;
+    rec.ty = p.y;
+    rec.facing = p.facing || rec.facing;
+    rec.anim = p.anim || rec.anim;
+    return rec;
+  }
+  function lerpRenderPositions(dt) {
+    // Strong smoothing factor — fast catch-up so input feels responsive,
+    // but smooth enough to hide the 50ms ticks. About 1 tile of slop max.
+    const k = 1 - Math.exp(-dt * 16);
+    for (const rec of state.renderPlayers.values()) {
+      rec.x += (rec.tx - rec.x) * k;
+      rec.y += (rec.ty - rec.y) * k;
+      // Snap when we're effectively there to avoid endless float drift.
+      if (Math.abs(rec.tx - rec.x) < 0.005) rec.x = rec.tx;
+      if (Math.abs(rec.ty - rec.y) < 0.005) rec.y = rec.ty;
+      rec.animTime += dt;
+    }
+  }
+  function attachBubble(playerId, text) {
+    const rec = state.renderPlayers.get(playerId);
+    if (!rec) return;
+    rec.bubble = { text: text.slice(0, 120), until: performance.now() + 4500 };
+  }
+
   // ---- state ----
   const state = {
     role: "player",
@@ -116,14 +245,25 @@
     cur: { hp: 0, mp: 0, st: 0 },
 
     // ---- realtime / multiplayer ----
-    me: null,                   // { id, name, x, y, facing, isAdmin, race }
+    me: null,                   // { id, name, x, y, facing, isAdmin, race } — authoritative latest
     others: new Map(),          // id -> { id, name, x, y, facing, anim, isAdmin, race }
+    // Visual records, one per player including self. We lerp these toward the
+    // authoritative position every frame so 60fps render smooths out the 20Hz
+    // server tick. Speech bubbles also live here so they follow the avatar.
+    renderPlayers: new Map(),   // id -> { name, isAdmin, race, weapon, x, y, facing, anim, bubble }
     ws: null,
     wsReady: false,
     lastInputSent: { dx: 0, dy: 0, sprint: false, facing: "down", t: 0 },
     inputDirty: false,
     serverTickHz: 20,
     presence: 1,
+
+    // Output meter (channeling power for casting). Scroll wheel changes this
+    // in player mode; ignored in editor mode (where wheel zooms the camera).
+    output: 100,
+
+    // Chat panel collapse state. Persisted across re-enters.
+    chatCollapsed: false,
   };
 
   // ---- chat ----
@@ -174,8 +314,11 @@
   chatForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const raw = chatInput.value;
-    if (!raw.trim()) return;
     chatInput.value = "";
+    // Auto-blur so movement keys (WASD/T) work again until the player
+    // explicitly re-opens chat with T.
+    chatInput.blur();
+    if (!raw.trim()) return;
     if (tryCommand(raw)) return;
     // Plain speech — broadcast to everyone in this shard via the socket.
     // The server will echo it back (including to us) so all clients render
@@ -202,9 +345,11 @@
       if (state.editor.open) { closeEditor(); return; }
       if (isTypingInChat()) { chatInput.blur(); return; }
     }
-    if (e.key === "Enter" && !isTypingInChat()) {
-      // Quick chat focus — feels game-y.
+    // T opens chat from anywhere in the realm. While typing, T just types
+    // a "t" like any letter (default browser behavior, no override).
+    if (key === "t" && !isTypingInChat()) {
       e.preventDefault();
+      if (state.chatCollapsed) setChatCollapsed(false);
       chatInput.focus();
       return;
     }
@@ -243,18 +388,28 @@
     const { x, y } = eventToTileCoords(e);
     state.mouse.tileX = x;
     state.mouse.tileY = y;
-    coordsEl.textContent = `(${x}, ${y})`;
+    // (Coords readout is updated each frame from the player's own position
+    // — see the tick loop — so it always reads as a tidy pair of integers.)
     // Drag-paint: holding the mouse button while moving keeps painting.
     if (state.editor.open && state.role === "admin") {
       if (state.mouse.leftDown)  paintAt(x, y, false);
       if (state.mouse.rightDown) paintAt(x, y, true);
     }
   });
+  // Wheel does double duty:
+  //   - Editor mode: zoom the camera (1× → 6×).
+  //   - Player mode: drive the Output meter (1% → 100%, 5% per notch).
+  // Per design doc §14: scroll = output, only zoom while building.
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const dir = e.deltaY > 0 ? -1 : 1;
-    const next = Math.max(1, Math.min(6, state.zoom + dir));
-    if (next !== state.zoom) state.zoom = next;
+    if (state.editor.open) {
+      const next = Math.max(1, Math.min(6, state.zoom + dir));
+      if (next !== state.zoom) state.zoom = next;
+    } else {
+      const next = Math.max(1, Math.min(100, state.output + dir * 5));
+      if (next !== state.output) { state.output = next; refreshOutput(); }
+    }
   }, { passive: false });
 
   // ---- world load / paint ----
@@ -430,6 +585,9 @@
   }
 
   // ---- editor open/close ----
+  // Opening the editor hides the player-facing HUD (stat panel, hotbar,
+  // output meter, presence, mini-map) so the admin sees the world cleanly.
+  // Chat stays — the admin still needs to type slash commands.
   function openEditor(mode) {
     state.editor.open = true;
     state.editor.mode = mode;
@@ -437,6 +595,7 @@
     editModeEl.textContent = mode;
     editFlag.hidden = false;
     paletteEl.hidden = false;
+    realmEl.classList.add("is-editing");
     canvas.style.cursor = "crosshair";
     chat(`Editor open — /${mode}. Pick a tile, click world to paint, right-click to erase.`, "cmd");
     ensureTilesetsLoaded();
@@ -445,6 +604,7 @@
     state.editor.open = false;
     paletteEl.hidden = true;
     editFlag.hidden = true;
+    realmEl.classList.remove("is-editing");
     chat("Editor closed.", "cmd");
   }
   function toggleEditor(mode) {
@@ -541,9 +701,15 @@
     }
     ctx.globalAlpha = 1;
 
-    // Other players first, then self on top.
-    for (const p of state.others.values()) drawPlayer(p, tilePx, false);
-    if (state.me) drawPlayer(state.me, tilePx, true);
+    // Draw all visible avatars from the smoothed render records, sorted by
+    // y so closer-to-camera souls overlap correctly. Self is flagged so it
+    // gets the brighter ring and label.
+    const meId = state.me?.id;
+    const recs = Array.from(state.renderPlayers.values())
+      .sort((a, b) => a.y - b.y);
+    for (const rec of recs) drawPlayer(rec, tilePx, rec.id === meId);
+    // Speech bubbles last so they sit on top of every avatar.
+    for (const rec of recs) drawBubble(rec, tilePx);
 
     // Editor overlays: light grid + cursor highlight.
     if (state.editor.open) {
@@ -555,56 +721,169 @@
     drawOriginCross(tilePx);
   }
 
-  // Each player is a glowing circle for now (sprites land when player race
-  // sheets are uploaded). Admins get a gold ring; others get a race-tinted
-  // body. Name plate floats above the head.
+  // ---- avatar rendering ----
+  // Players draw with their own sprite sheet when one is loaded; otherwise
+  // we fall back to the race-tinted glowing pip so the world is still
+  // legible. Name plate sits above the head and a soft elliptical shadow
+  // grounds the avatar to the tile.
   const RACE_COLOR = {
     human: "#f4d499", orc: "#7fe39a", elf: "#b9e6e6",
     crystalline: "#cfe4ff", voidborn: "#caa6ff",
   };
-  function drawPlayer(p, tilePx, isSelf) {
-    const { sx, sy } = worldToScreen(p.x, p.y, tilePx);
+  function drawPlayer(rec, tilePx, isSelf) {
+    const { sx, sy } = worldToScreen(rec.x, rec.y, tilePx);
     const cx = sx + tilePx / 2;
     const cy = sy + tilePx / 2;
+    // Use walk sheet only when the avatar is actually moving toward its
+    // target — covers both server-issued anim flag and visible drift.
+    const moving = rec.anim === "walk" ||
+                   Math.hypot(rec.tx - rec.x, rec.ty - rec.y) > 0.05;
+    const sprite = getSpriteForPlayer(rec, moving ? "walk" : "idle");
+    if (sprite) {
+      drawSpriteAvatar(sprite, rec, cx, cy, tilePx);
+    } else {
+      drawCirclePip(rec, cx, cy, tilePx, isSelf);
+    }
+    // Name plate (gold ring on selection, lighter for self)
+    const label = rec.name + (rec.isAdmin ? " ✦" : "");
+    ctx.font = "600 12px 'Cinzel', 'Cormorant Garamond', serif";
+    const w = ctx.measureText(label).width + 12;
+    const ny = cy - tilePx * 0.85 - 14;
+    // panel
+    ctx.fillStyle = "rgba(10,10,18,0.82)";
+    ctx.fillRect(cx - w / 2, ny, w, 16);
+    ctx.strokeStyle = isSelf ? "rgba(246,228,163,0.7)"
+                              : "rgba(217,166,74,0.35)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - w / 2 + 0.5, ny + 0.5, w - 1, 15);
+    ctx.fillStyle = isSelf ? "#f6e4a3" : (rec.isAdmin ? "#f6e4a3" : "#e9dfc6");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, cx, ny + 8);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+  function drawCirclePip(rec, cx, cy, tilePx, isSelf) {
     const r  = tilePx * 0.42;
-    const fill = p.isAdmin ? "#f6e4a3" : (RACE_COLOR[p.race] || "#cfe4ff");
-    // shadow
+    const fill = rec.isAdmin ? "#f6e4a3" : (RACE_COLOR[rec.race] || "#cfe4ff");
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.beginPath();
     ctx.ellipse(cx, cy + r * 0.7, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
     ctx.fill();
-    // body
     ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
-    // ring (admin = thicker gold, self = thin gold, others = dim)
     ctx.lineWidth = isSelf ? 2.5 : 1.5;
-    ctx.strokeStyle = p.isAdmin ? "#f6e4a3" : (isSelf ? "rgba(246,228,163,0.9)" : "rgba(0,0,0,0.55)");
+    ctx.strokeStyle = rec.isAdmin ? "#f6e4a3" : (isSelf ? "rgba(246,228,163,0.9)" : "rgba(0,0,0,0.55)");
     ctx.beginPath();
     ctx.arc(cx, cy, r + (isSelf ? 1 : 0), 0, Math.PI * 2);
     ctx.stroke();
-    // facing tick
     const dirs = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
-    const [fx, fy] = dirs[p.facing] || [0, 1];
+    const [fx, fy] = dirs[rec.facing] || [0, 1];
     ctx.strokeStyle = "rgba(20,16,8,0.85)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + fx * r * 0.85, cy + fy * r * 0.85);
     ctx.stroke();
-    // name plate
-    const label = p.name + (p.isAdmin ? " ✦" : "");
-    ctx.font = "600 12px 'Cinzel', 'Cormorant Garamond', serif";
-    const w = ctx.measureText(label).width + 10;
-    const ny = cy - r - 14;
-    ctx.fillStyle = "rgba(10,10,18,0.78)";
-    ctx.fillRect(cx - w / 2, ny, w, 16);
-    ctx.fillStyle = isSelf ? "#f6e4a3" : "#e3dcc7";
+  }
+  function drawSpriteAvatar(sprite, rec, cx, cy, tilePx) {
+    const slice = sprite.slice;
+    const frames = Math.max(1, slice.frames | 0);
+    const idx = Math.floor(rec.animTime * slice.fps) % frames;
+    let sx, sy, sw, sh;
+    if (slice.perFrame && slice.frameRects && slice.frameRects[idx]) {
+      ({ x: sx, y: sy, w: sw, h: sh } = slice.frameRects[idx]);
+    } else {
+      sx = slice.offsetX + idx * (slice.frameW + slice.gapX);
+      sy = slice.offsetY;
+      sw = slice.frameW;
+      sh = slice.frameH;
+    }
+    // Scale so each sprite is roughly two tiles tall — feels right for a
+    // top-down RPG (54px sprite at 16px tiles → ~1.7 tiles, then ×scale).
+    const targetH = tilePx * 1.9;
+    const scale = targetH / sh;
+    const dw = sw * scale, dh = sh * scale;
+    const dx = cx - dw / 2;
+    const dy = cy - dh * 0.78;       // anchor near the feet, not the center
+    // Soft shadow at the base
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + tilePx * 0.32, tilePx * 0.36, tilePx * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sprite.img, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
+  // Speech bubble that floats above the avatar for a few seconds after
+  // a chat message arrives. Wraps to fit a max width and adjusts its
+  // height per line — clean parchment look matches the rest of the HUD.
+  function drawBubble(rec, tilePx) {
+    if (!rec.bubble) return;
+    const now = performance.now();
+    if (now > rec.bubble.until) { rec.bubble = null; return; }
+    const { sx, sy } = worldToScreen(rec.x, rec.y, tilePx);
+    const cx = sx + tilePx / 2;
+    const baseY = sy + tilePx / 2 - tilePx * 0.85 - 18;
+
+    ctx.font = "500 13px 'Cormorant Garamond', serif";
+    const maxW = 220;
+    const words = rec.bubble.text.split(/\s+/);
+    const lines = [];
+    let cur = "";
+    for (const w of words) {
+      const trial = cur ? cur + " " + w : w;
+      if (ctx.measureText(trial).width > maxW && cur) { lines.push(cur); cur = w; }
+      else cur = trial;
+    }
+    if (cur) lines.push(cur);
+    const lineH = 16;
+    const padX = 8, padY = 5;
+    let bw = 0;
+    for (const l of lines) bw = Math.max(bw, ctx.measureText(l).width);
+    bw += padX * 2;
+    const bh = lines.length * lineH + padY * 2;
+    const bx = cx - bw / 2;
+    const by = baseY - bh - 6;
+    // Fade out in the last 600ms.
+    const remain = rec.bubble.until - now;
+    const alpha = remain < 600 ? remain / 600 : 1;
+    ctx.globalAlpha = alpha;
+    // panel + ornate gold edge
+    ctx.fillStyle = "rgba(14,12,18,0.92)";
+    ctx.strokeStyle = "rgba(217,166,74,0.7)";
+    ctx.lineWidth = 1;
+    roundRect(bx, by, bw, bh, 4);
+    ctx.fill();
+    ctx.stroke();
+    // tail
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, by + bh);
+    ctx.lineTo(cx + 5, by + bh);
+    ctx.lineTo(cx,     by + bh + 6);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(14,12,18,0.92)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(217,166,74,0.7)";
+    ctx.stroke();
+    // text
+    ctx.fillStyle = rec.isAdmin ? "#f6e4a3" : "#ece2c5";
     ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, cx, ny + 8);
+    ctx.textBaseline = "top";
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], cx, by + padY + i * lineH);
+    }
     ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+    ctx.globalAlpha = 1;
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y,     x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x,     y + h, r);
+    ctx.arcTo(x,     y + h, x,     y,     r);
+    ctx.arcTo(x,     y,     x + w, y,     r);
+    ctx.closePath();
   }
 
   function drawTileRef(ref, dx, dy, tilePx) {
@@ -690,7 +969,7 @@
 
   let lastTickTime = 0;
   function tick(now) {
-    const dt = lastTickTime ? (now - lastTickTime) / 1000 : 0;
+    const dt = lastTickTime ? Math.min(0.1, (now - lastTickTime) / 1000) : 0;
     lastTickTime = now;
 
     if (state.editor.open) {
@@ -709,22 +988,39 @@
         if (snapX) { state.cameraX += snapX; camAccumX -= snapX; }
         if (snapY) { state.cameraY += snapY; camAccumY -= snapY; }
       }
-      // While editing, pause input transmission so the player avatar stays put.
+      // While editing, pause input transmission so the avatar stays put.
       if (state.wsReady && (state.lastInputSent.dx || state.lastInputSent.dy)) {
         state.lastInputSent.dx = 0; state.lastInputSent.dy = 0;
         try { state.ws.send(JSON.stringify({ type: "input", dx: 0, dy: 0, sprint: false, facing: state.lastInputSent.facing })); } catch {}
       }
     } else {
-      // Player mode: send input, camera follows our authoritative position.
       maybeSendInput();
-      if (state.me) {
+    }
+
+    // Smoothly interpolate every avatar's visual position toward its
+    // server-authoritative target. This is what makes 60fps render look
+    // fluid even though the server only ticks at 20Hz.
+    lerpRenderPositions(dt);
+
+    // Camera follows the smoothed self-record so it never jitters.
+    if (!state.editor.open && state.me) {
+      const meRec = state.renderPlayers.get(state.me.id);
+      if (meRec) {
         const tilePx = state.tileSize * state.zoom;
         const cols = window.innerWidth  / tilePx;
         const rows = window.innerHeight / tilePx;
-        state.cameraX = state.me.x - cols / 2 + 0.5;
-        state.cameraY = state.me.y - rows / 2 + 0.5;
+        state.cameraX = meRec.x - cols / 2 + 0.5;
+        state.cameraY = meRec.y - rows / 2 + 0.5;
       }
     }
+
+    // HUD coords readout — show the player's own integer tile, not the
+    // float lerp position and not the mouse hover (the mouse readout was
+    // a leftover from the old editor-only HUD).
+    if (state.me) {
+      coordsEl.textContent = `(${Math.round(state.me.x)}, ${Math.round(state.me.y)})`;
+    }
+
     render();
     renderMinimap();
     raf = requestAnimationFrame(tick);
@@ -768,22 +1064,30 @@
         state.serverTickHz = msg.tickHz || 20;
         state.me = msg.you;
         state.others.clear();
-        for (const o of msg.others || []) state.others.set(o.id, o);
+        state.renderPlayers.clear();
+        ensureRenderRec(msg.you);
+        for (const o of msg.others || []) {
+          state.others.set(o.id, o);
+          ensureRenderRec(o);
+        }
         setPresence(state.others.size + 1);
         chat(`Shard "${msg.shard}" — ${state.others.size} other ${state.others.size === 1 ? "soul" : "souls"} present.`, "cmd");
         break;
       case "join":
         if (msg.player && msg.player.id !== state.me?.id) {
           state.others.set(msg.player.id, msg.player);
+          ensureRenderRec(msg.player);
           setPresence(state.others.size + 1);
         }
         break;
       case "leave":
         state.others.delete(msg.id);
+        state.renderPlayers.delete(msg.id);
         setPresence(state.others.size + (state.me ? 1 : 0));
         break;
-      case "state":
+      case "state": {
         for (const p of msg.players || []) {
+          ensureRenderRec(p);
           if (state.me && p.id === state.me.id) {
             state.me.x = p.x; state.me.y = p.y;
             state.me.facing = p.facing; state.me.anim = p.anim;
@@ -798,15 +1102,22 @@
         for (const id of state.others.keys()) {
           if (!present.has(id)) state.others.delete(id);
         }
+        for (const id of state.renderPlayers.keys()) {
+          if (!present.has(id) && id !== state.me?.id) state.renderPlayers.delete(id);
+        }
         // Snapshot's player count is the truth — keep the HUD in lockstep.
         setPresence((msg.players || []).length);
         break;
+      }
       case "chat":
         if (msg.kind === "system") chat(msg.text, "cmd");
         else if (msg.from) {
           const tag = msg.from.isAdmin ? "✦ " : "";
           chat(`${tag}${msg.from.name}: ${msg.text}`,
                msg.from.id === state.me?.id ? "self" : "");
+          // Speech bubble above the speaker — shows up over their avatar
+          // for everyone in the shard, including themselves.
+          attachBubble(msg.from.id, msg.text);
         }
         break;
       case "goodbye":
@@ -820,6 +1131,7 @@
     state.ws = null;
     state.wsReady = false;
     state.others.clear();
+    state.renderPlayers.clear();
     state.me = null;
   }
 
@@ -849,12 +1161,15 @@
     const maxMp = ch.mana_cap || 1;
     const maxSt = ch.stamina_cap || 1;
     const pct = (n, m) => Math.max(0, Math.min(100, (n / m) * 100));
-    barHpFill.style.width = pct(state.cur.hp, maxHp) + "%";
+    const hpPct = pct(state.cur.hp, maxHp);
+    barHpFill.style.width = hpPct + "%";
     barMpFill.style.width = pct(state.cur.mp, maxMp) + "%";
     barStFill.style.width = pct(state.cur.st, maxSt) + "%";
     barHpNum.textContent = `${Math.round(state.cur.hp)}/${maxHp}`;
     barMpNum.textContent = `${Math.round(state.cur.mp)}/${maxMp}`;
     barStNum.textContent = `${Math.round(state.cur.st)}/${maxSt}`;
+    // Pulse the HP bar when life is low — purely cosmetic until combat lands.
+    barHpFill.parentElement.classList.toggle("is-low", hpPct < 30);
   }
   function setBadge(role) {
     rbServerName.textContent = "0 · Firstlight";
@@ -866,57 +1181,107 @@
   }
 
   // Mini-map: 160×160 px, 1 px ≈ 1 tile, range ±80 tiles around self.
-  // Draws painted-tile occupancy (faint), then other souls (race-tinted),
-  // then self at the exact center as a gold pip with a facing tick.
+  // Re-renders at ~12Hz (capped) so we never spend 60fps walking the world's
+  // painted-tile maps. Draws background + paint (faint) + cardinal cross +
+  // other souls + self pip with a glow halo and facing tick.
   const MM_HALF = 80;
+  let lastMinimapAt = 0;
   function renderMinimap() {
+    const now = performance.now();
+    if (now - lastMinimapAt < 80) return; // ~12 Hz cap
+    lastMinimapAt = now;
+
     const w = minimap.width, h = minimap.height;
+    const cx = w / 2, cy = h / 2;
+    // Backplate
     minimapCtx.fillStyle = "#0c0e14";
     minimapCtx.fillRect(0, 0, w, h);
-    const cx = w / 2, cy = h / 2;
-    const me = state.me;
-    if (!me) return;
-    // Faint paint occupancy (only the active "ground" + "decor" layers).
+
+    // Center on the smoothed self position so the pip is rock-steady.
+    const meRec = state.me ? state.renderPlayers.get(state.me.id) : null;
+    const meX = meRec ? meRec.x : 0;
+    const meY = meRec ? meRec.y : 0;
+
+    // Faint painted-tile occupancy. Cap iterations so a fully-painted world
+    // never becomes a perf cliff.
     if (state.world) {
-      minimapCtx.fillStyle = "rgba(95, 130, 80, 0.35)";
-      for (const layer of state.world.layers) {
+      minimapCtx.fillStyle = "rgba(105, 145, 90, 0.42)";
+      let drawn = 0;
+      const cap = 6000;
+      outer: for (const layer of state.world.layers) {
         for (const k in layer.tiles) {
           const c = k.indexOf(",");
           const tx = +k.slice(0, c), ty = +k.slice(c + 1);
-          const dx = tx - me.x, dy = ty - me.y;
+          const dx = tx - meX, dy = ty - meY;
           if (Math.abs(dx) > MM_HALF || Math.abs(dy) > MM_HALF) continue;
           minimapCtx.fillRect(cx + dx, cy + dy, 1, 1);
+          if (++drawn >= cap) break outer;
         }
       }
     }
-    // Cardinal cross + frame
-    minimapCtx.strokeStyle = "rgba(217,166,74,0.18)";
+
+    // Cardinal cross + outer frame
+    minimapCtx.strokeStyle = "rgba(217,166,74,0.22)";
     minimapCtx.lineWidth = 1;
     minimapCtx.beginPath();
     minimapCtx.moveTo(cx + 0.5, 0); minimapCtx.lineTo(cx + 0.5, h);
     minimapCtx.moveTo(0, cy + 0.5); minimapCtx.lineTo(w, cy + 0.5);
     minimapCtx.stroke();
-    // Other souls
-    for (const o of state.others.values()) {
-      const dx = o.x - me.x, dy = o.y - me.y;
+
+    // Other souls (3px square, race-tinted)
+    for (const rec of state.renderPlayers.values()) {
+      if (state.me && rec.id === state.me.id) continue;
+      const dx = rec.x - meX, dy = rec.y - meY;
       if (Math.abs(dx) > MM_HALF || Math.abs(dy) > MM_HALF) continue;
       const px = Math.round(cx + dx), py = Math.round(cy + dy);
-      minimapCtx.fillStyle = o.isAdmin ? "#f6e4a3" : (RACE_COLOR[o.race] || "#cfe4ff");
+      minimapCtx.fillStyle = rec.isAdmin ? "#f6e4a3" : (RACE_COLOR[rec.race] || "#cfe4ff");
       minimapCtx.fillRect(px - 1, py - 1, 3, 3);
     }
-    // Self pip (slightly larger, gold)
-    minimapCtx.fillStyle = "#f6e4a3";
-    minimapCtx.fillRect(cx - 2, cy - 2, 4, 4);
-    minimapCtx.strokeStyle = "rgba(20,16,8,0.85)";
-    minimapCtx.strokeRect(cx - 2.5, cy - 2.5, 5, 5);
-    // Facing tick
-    const fdir = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[me.facing] || [0, 1];
-    minimapCtx.strokeStyle = "#f6e4a3";
+
+    if (!meRec) return;
+
+    // Self pip — gold with a soft glow halo so it always reads against any
+    // backdrop. This is the bit the user couldn't find before.
+    const grd = minimapCtx.createRadialGradient(cx, cy, 0, cx, cy, 9);
+    grd.addColorStop(0, "rgba(246,228,163,0.9)");
+    grd.addColorStop(1, "rgba(246,228,163,0)");
+    minimapCtx.fillStyle = grd;
+    minimapCtx.fillRect(cx - 9, cy - 9, 18, 18);
+    minimapCtx.fillStyle = "#fff7d8";
+    minimapCtx.fillRect(cx - 2, cy - 2, 5, 5);
+    minimapCtx.strokeStyle = "rgba(20,16,8,0.95)";
+    minimapCtx.lineWidth = 1;
+    minimapCtx.strokeRect(cx - 2.5, cy - 2.5, 6, 6);
+    // Facing tick (fans out from the pip)
+    const fdir = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[meRec.facing] || [0, 1];
+    minimapCtx.strokeStyle = "#fff7d8";
+    minimapCtx.lineWidth = 2;
     minimapCtx.beginPath();
     minimapCtx.moveTo(cx + 0.5, cy + 0.5);
-    minimapCtx.lineTo(cx + 0.5 + fdir[0] * 6, cy + 0.5 + fdir[1] * 6);
+    minimapCtx.lineTo(cx + 0.5 + fdir[0] * 8, cy + 0.5 + fdir[1] * 8);
     minimapCtx.stroke();
   }
+
+  // ---- output meter ----
+  function refreshOutput() {
+    outFill.style.width = state.output + "%";
+    outNum.textContent  = state.output + "%";
+    // Glow the meter when the player is dialing back from full power so
+    // the change is visible without staring at the number.
+    outputBox.classList.toggle("is-charging", state.output < 100);
+  }
+
+  // ---- chat collapse ----
+  function setChatCollapsed(c) {
+    state.chatCollapsed = c;
+    chatPanel.classList.toggle("is-collapsed", c);
+    chatBody.hidden = c;
+    chatCollapseGlyph.textContent = c ? "▴" : "▾";
+  }
+  chatHead.addEventListener("click", (e) => {
+    e.preventDefault();
+    setChatCollapsed(!state.chatCollapsed);
+  });
 
   // ---- enter / leave ----
   async function enter({ role, character }) {
@@ -924,8 +1289,11 @@
     setBadge(state.role);
     realmEl.hidden = false;
     resize();
-    // If the host page handed us the character row, use it immediately so
-    // the HUD has values on first paint. Otherwise pull it ourselves.
+    refreshOutput();
+    setChatCollapsed(state.chatCollapsed);
+    // Kick off sprite loading in parallel with the character fetch so first
+    // paint already has the admin's art ready when the welcome arrives.
+    const spritesPromise = loadAdminSprites();
     if (character) applyCharacterToHud(character);
     else {
       try {
@@ -936,12 +1304,14 @@
     if (!state.booted) {
       state.booted = true;
       chat("You step onto the plain grass.", "good");
+      chat("Press T to speak. Click the chat header to fold it away.", "cmd");
       if (state.role === "admin") {
         chat("Architect: type /command we, /command world_edit, or /command server_edit to weave the world.", "cmd");
       }
       try { await loadWorld(); }
       catch (err) { chat("Failed to load world: " + err.message, "err"); }
     }
+    await spritesPromise.catch(() => {});
     connectSocket();
     if (!raf) raf = requestAnimationFrame(tick);
   }
