@@ -20,6 +20,11 @@
     "/server_edit": "server_edit",
   };
 
+  // Hotbar slot button references (queried lazily because the buttons live
+  // in the static markup).  We tag slot-2 with [data-equipped] when the
+  // player toggles Mana Bolt on so the CSS pulse highlights it.
+  const hbSlot2 = document.querySelector('.hb-slot[data-slot="2"]');
+
   const realmEl     = $("#realm");
   const canvas      = $("#realm-canvas");
   const ctx         = canvas.getContext("2d");
@@ -87,6 +92,7 @@
     spellbook:  $("#modal-spellbook"),
     quests:     $("#modal-quests"),
     help:       $("#modal-help"),
+    spellwiz:   $("#modal-spellwiz"),
   };
   const codexButtons = document.querySelectorAll(".codex-btn[data-modal]");
   const atlasExpand  = $("#atlas-expand-btn");
@@ -368,6 +374,21 @@
     // in player mode; ignored in editor mode (where wheel zooms the camera).
     output: 100,
 
+    // Slot-2 spell equipped state.  Pressing 2 toggles this — there is NO
+    // auto-fire on the keystroke; the player must left- or right-click to
+    // actually cast.  Empty string means "nothing equipped".
+    equippedSpell: "",
+
+    // Right-click charge-cast.  When the right button is held while a
+    // spell is equipped we build a charge from the current Output dial,
+    // then release it on mouseup.  The on-screen Output meter pulses gold
+    // through the .is-charging class while this is active.
+    charge: { active: false, t0: 0, output: 0 },
+
+    // Drifting fore-glow particles for the void backdrop (violet & gold
+    // motes).  Seeded once on first render and reused every frame.
+    starParticles: null,
+
     // Chat panel collapse state. Persisted across re-enters.
     chatCollapsed: false,
   };
@@ -383,14 +404,19 @@
   }
 
   // Slash-command parser. Returns true if the input was handled as a command
-  // (so the chat line shouldn't be echoed as plain speech).
+  // (so the chat line shouldn't be echoed as plain speech).  Per design doc
+  // §27 we cover the full Architect catalog (17 sub-tables) — most commands
+  // are forwarded to the server as a {type:"command"} packet so the server's
+  // existing /admin handler can dispatch them.
   function tryCommand(raw) {
     const text = raw.trim();
     if (!text.startsWith("/")) return false;
     const lower = text.toLowerCase();
 
+    // Universal exits / help, available to every soul.
     if (lower === "/help" || lower === "/?") {
-      chat("Commands: /command we, /command world_edit, /command server_edit (admin), /leave", "cmd");
+      openModal("help");
+      chat("Help compendium opened.  Press H to toggle.", "cmd");
       return true;
     }
     if (lower === "/leave" || lower === "/exit" || lower === "/quit") {
@@ -413,8 +439,137 @@
       }
     }
 
+    // /command create_spell — open the 11-step inscribe wizard.
+    if (lower === "/command create_spell" || lower === "/create_spell") {
+      if (state.role !== "admin") {
+        chat("Only the Architect may inscribe new spells.", "err");
+        return true;
+      }
+      openSpellWizard();
+      return true;
+    }
+
+    // /tp <x> <y>  — local self-teleport, sent to server for validation.
+    // Pattern accepts both /tp x y and /teleport x y.
+    const tpMatch = text.match(/^\/(?:tp|teleport)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*$/i);
+    if (tpMatch) {
+      sendCommand({ verb: "tp", x: parseFloat(tpMatch[1]), y: parseFloat(tpMatch[2]) });
+      return true;
+    }
+
+    // /goto <name>  — teleport to another player by display name.
+    const gotoMatch = text.match(/^\/(?:goto|to)\s+(.+?)\s*$/i);
+    if (gotoMatch) {
+      sendCommand({ verb: "goto", target: gotoMatch[1] });
+      return true;
+    }
+
+    // /summon <name>  — pull another player to your tile (admin).
+    const sumMatch = text.match(/^\/summon\s+(.+?)\s*$/i);
+    if (sumMatch) {
+      if (state.role !== "admin") { chat("Architect only.", "err"); return true; }
+      sendCommand({ verb: "summon", target: sumMatch[1] });
+      return true;
+    }
+
+    // /home — return to spawn.
+    if (lower === "/home" || lower === "/spawn") {
+      sendCommand({ verb: "home" });
+      return true;
+    }
+
+    // Generic catch-all: forward any other slash command verb to the
+    // server so admin tooling on that side can answer.  Server replies
+    // arrive as chat lines through the normal welcome/cmd channel.
+    const parts = text.slice(1).split(/\s+/);
+    const verb = parts.shift().toLowerCase();
+    if (verb) {
+      sendCommand({ verb, args: parts });
+      return true;
+    }
+
     chat(`Unknown command: ${text}`, "err");
     return true;
+  }
+  function sendCommand(payload) {
+    if (!state.wsReady) {
+      chat("The realm hasn't replied yet — try again in a moment.", "err");
+      return;
+    }
+    try {
+      state.ws.send(JSON.stringify({ type: "command", ...payload }));
+    } catch (err) {
+      chat("Command failed: " + err.message, "err");
+    }
+  }
+
+  // ---- /command create_spell — 11-step inscribe wizard ----------------
+  // Per design doc §16. The wizard collects identity → school → form →
+  // targeting → reach → width → cost & cadence → effects → visuals →
+  // sound → review, then emits the spell as a JSON blob into chat for
+  // preview (server persistence lands in a follow-up).  The DOM was
+  // already authored in index.html; this block wires the stepper, page
+  // navigation, review build, and inscribe commit.
+  let swStep = 1;
+  const SW_LAST = 11;
+  function $sw(id) { return document.getElementById(id); }
+  function openSpellWizard() {
+    swStep = 1;
+    swSyncUI();
+    openModal("spellwiz");
+  }
+  function swSyncUI() {
+    const wiz = modals.spellwiz;
+    if (!wiz) return;
+    wiz.querySelectorAll(".spellwiz-stepper li[data-step]").forEach((li) => {
+      li.classList.toggle("is-current", +li.dataset.step === swStep);
+      li.classList.toggle("is-done", +li.dataset.step <  swStep);
+    });
+    wiz.querySelectorAll(".spellwiz-page[data-page]").forEach((sec) => {
+      sec.classList.toggle("is-current", +sec.dataset.page === swStep);
+      sec.hidden = (+sec.dataset.page !== swStep);
+    });
+    const back = $sw("sw-back"), next = $sw("sw-next"), save = $sw("sw-save");
+    if (back) back.disabled = (swStep === 1);
+    if (next) next.hidden   = (swStep === SW_LAST);
+    if (save) save.hidden   = (swStep !== SW_LAST);
+    if (swStep === SW_LAST) swRenderReview();
+  }
+  function swCollect() {
+    return {
+      name:   $sw("sw-name")?.value.trim() || "Untitled Spell",
+      id:     ($sw("sw-id")?.value.trim() || "untitled_spell").toLowerCase().replace(/[^a-z0-9_]/g, "_"),
+      school: $sw("sw-school")?.value || "arcane",
+      form:   $sw("sw-form")?.value   || "projectile",
+      aim:    $sw("sw-aim")?.value    || "directional",
+      reach:  parseFloat($sw("sw-reach")?.value || "8"),
+      width:  parseFloat($sw("sw-width")?.value || "0.55"),
+      cost:   parseInt($sw("sw-cost")?.value || "50", 10),
+      cooldown_ms: parseInt($sw("sw-cd")?.value   || "0", 10),
+      power:  parseFloat($sw("sw-power")?.value || "1"),
+      damage: parseInt($sw("sw-dmg")?.value || "50", 10),
+      glyph:  $sw("sw-glyph")?.value || "rune-arrow",
+      colors: { core: $sw("sw-color-core")?.value || "#b070ff",
+                trail: $sw("sw-color-trail")?.value || "#f6e4a3" },
+      sound:  { cast: $sw("sw-snd-cast")?.value || "chime",
+                hit:  $sw("sw-snd-hit")?.value  || "thump" },
+    };
+  }
+  function swRenderReview() {
+    const out = $sw("sw-review");
+    if (!out) return;
+    out.textContent = JSON.stringify(swCollect(), null, 2);
+  }
+  // Wire the wizard buttons exactly once.
+  if (modals.spellwiz) {
+    $sw("sw-back")?.addEventListener("click", () => { if (swStep > 1) { swStep--; swSyncUI(); } });
+    $sw("sw-next")?.addEventListener("click", () => { if (swStep < SW_LAST) { swStep++; swSyncUI(); } });
+    $sw("sw-save")?.addEventListener("click", () => {
+      const spell = swCollect();
+      chat(`Spell inscribed: ${spell.name} (${spell.id}). Preview JSON:`, "good");
+      chat(JSON.stringify(spell), "cmd");
+      closeModal();
+    });
   }
 
   chatForm.addEventListener("submit", (e) => {
@@ -466,12 +621,13 @@
       e.preventDefault();
       sendAttack();
     }
-    // Hotbar slot 2 → Mana Bolt. Cost & damage scale with the channeled
-    // Output dial (mouse-wheel). Held back the same way as melee while
-    // the world editor palette is up.
+    // Hotbar slot 2 → EQUIP Mana Bolt.  Per design doc §14/§18 the
+    // hotkey only toggles the spell into the active hand; it does not
+    // fire.  Casting happens on mouse click (left = tap @ 20%, right =
+    // hold-to-charge), with a 360° aim toward the cursor.
     if (key === "2" && !state.editor.open) {
       e.preventDefault();
-      sendCast("mana_bolt");
+      toggleEquipSpell("mana_bolt");
     }
     if (key) state.keys.add(key);
   });
@@ -501,11 +657,38 @@
     if (state.editor.open && state.role === "admin") {
       const { x, y } = eventToTileCoords(e);
       paintAt(x, y, e.button === 2);
+      return;
+    }
+    // ---- spell casting (player mode, slot-2 spell equipped) ------------
+    // Per design doc §14/§18:
+    //   • Left-click  = instant TAP cast at a fixed 20% Output (cheap,
+    //                   weak — used for poking).
+    //   • Right-click = HOLD to charge to your current Output dial; the
+    //                   meter pulses gold.  Release to cast at whatever
+    //                   the dial reads at release time.
+    if (state.equippedSpell && !state.editor.open) {
+      if (e.button === 0) {
+        sendCast(state.equippedSpell, 0.20);
+      } else if (e.button === 2) {
+        state.charge.active = true;
+        state.charge.t0 = performance.now();
+        state.charge.output = state.output;
+        outputBox && outputBox.classList.add("is-charging");
+      }
     }
   });
   window.addEventListener("mouseup", (e) => {
     if (e.button === 0) state.mouse.leftDown = false;
     if (e.button === 2) state.mouse.rightDown = false;
+    // Release a charged right-click cast (if one was building).
+    if (e.button === 2 && state.charge.active) {
+      const out = Math.max(0.05, Math.min(1, (state.output || 100) / 100));
+      state.charge.active = false;
+      outputBox && outputBox.classList.remove("is-charging");
+      if (state.equippedSpell && !state.editor.open) {
+        sendCast(state.equippedSpell, out);
+      }
+    }
   });
   canvas.addEventListener("mousemove", (e) => {
     const { x, y } = eventToTileCoords(e);
@@ -608,6 +791,38 @@
   //            cursor isn't over a tile) and replace every matching tile
   //            within the viewport with the selected one
   //   all    — paint every visible tile (overwrites)
+  // Bounding box around every painted tile across every layer, padded by
+  // one viewport so "fill the whole world" reaches a margin past the
+  // existing canvas. Capped at ±150 tiles so even a totally empty world
+  // produces a sane, useful brush instead of nothing — and so a careless
+  // "world" fill never tries to send millions of tiles.
+  function computeWorldBBox() {
+    const PAD = 8;
+    const HARD = 150;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const layer of state.world.layers) {
+      for (const k in layer.tiles) {
+        const c = k.indexOf(",");
+        const tx = +k.slice(0, c), ty = +k.slice(c + 1);
+        if (tx < x0) x0 = tx;
+        if (tx > x1) x1 = tx;
+        if (ty < y0) y0 = ty;
+        if (ty > y1) y1 = ty;
+      }
+    }
+    if (!isFinite(x0)) {
+      // No painted tiles yet — center the world around the camera.
+      const cx = Math.floor(state.cameraX + viewportTilesAcross() / 2);
+      const cy = Math.floor(state.cameraY + viewportTilesDown()   / 2);
+      return { x0: cx - 32, y0: cy - 24, x1: cx + 32, y1: cy + 24 };
+    }
+    x0 -= PAD; y0 -= PAD; x1 += PAD; y1 += PAD;
+    const cx = Math.floor((x0 + x1) / 2), cy = Math.floor((y0 + y1) / 2);
+    if (x1 - x0 > HARD * 2) { x0 = cx - HARD; x1 = cx + HARD; }
+    if (y1 - y0 > HARD * 2) { y0 = cy - HARD; y1 = cy + HARD; }
+    return { x0, y0, x1, y1 };
+  }
+
   async function applyFillMode(mode) {
     if (!state.world) { chat("World not loaded yet.", "err"); return; }
     const layerName = state.editor.layer;
@@ -615,12 +830,23 @@
     if (!layer) { chat(`No layer "${layerName}".`, "err"); return; }
     if (!state.editor.selected) { chat("Pick a tile from the palette first.", "err"); return; }
     const tile = `${state.editor.selected.tileset}:${state.editor.selected.tileId}`;
-    const x0 = Math.floor(state.cameraX);
-    const y0 = Math.floor(state.cameraY);
-    const w  = viewportTilesAcross();
-    const h  = viewportTilesDown();
-    const x1 = x0 + w - 1;
-    const y1 = y0 + h - 1;
+
+    // Pick the bounding rect we're painting into.  For most modes this
+    // is the current viewport.  The new "world" / "world-edges" modes
+    // expand to a generous bounding box around every painted tile we
+    // already have (capped so the brush can never blow up the server).
+    let x0, y0, x1, y1;
+    if (mode === "world" || mode === "world-edges") {
+      const bb = computeWorldBBox();
+      x0 = bb.x0; y0 = bb.y0; x1 = bb.x1; y1 = bb.y1;
+    } else {
+      x0 = Math.floor(state.cameraX);
+      y0 = Math.floor(state.cameraY);
+      const w = viewportTilesAcross();
+      const h = viewportTilesDown();
+      x1 = x0 + w - 1;
+      y1 = y0 + h - 1;
+    }
     // For 'same' we need a reference tile — prefer the cursor's tile if
     // it's in-frame, else the center of the viewport.
     let matchTile = null;
@@ -638,10 +864,11 @@
         const key = `${x},${y}`;
         const cur = layer.tiles[key];
         let take = false;
-        if (mode === "empty")     take = !cur;
-        else if (mode === "edges") take = isEdge;
-        else if (mode === "same")  take = (cur || null) === matchTile;
-        else                       take = true; // 'all'
+        if (mode === "empty")            take = !cur;
+        else if (mode === "edges")       take = isEdge;
+        else if (mode === "world-edges") take = isEdge;
+        else if (mode === "same")        take = (cur || null) === matchTile;
+        else                             take = true; // 'all' or 'world'
         if (!take) continue;
         if (cur === tile) continue; // no-op
         writes.push({ x, y, tile });
@@ -846,17 +1073,78 @@
   // a single large off-screen canvas (256×256) and tiled across the
   // viewport. Two parallax layers of stars give a faint sense of depth
   // without costing per-frame work.
+  // Painterly aurora — a soft radial blob blended over the starfield to
+  // give the void a slow, breathing wash of color.  Used by render() with
+  // two different palettes (violet + gold) for that "magical realism"
+  // feel the design doc calls for.
+  function drawAuroraBlob(cx, cy, r, hot, cold) {
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grd.addColorStop(0, hot);
+    grd.addColorStop(1, cold);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = grd;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.restore();
+  }
+
+  // Drifting violet/gold motes that float in front of the starfield.
+  // Seeded once with stable random vectors so they keep their identity
+  // across frames; positions are computed from `t * speed` directly so
+  // we never accumulate float drift over a long session.
+  function seedStarParticles(n) {
+    const arr = [];
+    const W = Math.max(window.innerWidth,  640);
+    const H = Math.max(window.innerHeight, 480);
+    for (let i = 0; i < n; i++) {
+      const gold = Math.random() < 0.45;
+      arr.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 6,   // px / second
+        vy: (Math.random() - 0.5) * 6,
+        r: 0.6 + Math.random() * 1.6,
+        phase: Math.random() * Math.PI * 2,
+        twinkle: 0.6 + Math.random() * 0.8,
+        gold,
+      });
+    }
+    return arr;
+  }
+  function drawStarParticles(t) {
+    const W = window.innerWidth, H = window.innerHeight;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of state.starParticles) {
+      // Wrap softly across the viewport so motes always reappear instead
+      // of escaping into infinity.
+      const x = ((p.x + p.vx * t) % W + W) % W;
+      const y = ((p.y + p.vy * t) % H + H) % H;
+      const a = 0.35 + 0.45 * Math.sin(t * p.twinkle + p.phase);
+      const fill = p.gold
+        ? `rgba(246,228,163,${0.25 + a * 0.55})`
+        : `rgba(176,112,255,${0.20 + a * 0.55})`;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(x, y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   let starfieldPattern = null;
   function makeStarfieldPattern() {
     const SIZE = 256;
     const g = document.createElement("canvas");
     g.width = SIZE; g.height = SIZE;
     const c = g.getContext("2d");
-    // Base void — slight blue-violet tint so it doesn't read as pure dead
-    // black against the gold UI.
+    // Base void — match the login screen's deep ink with just a hint of
+    // violet so the field doesn't read as flat dead black against the
+    // gold UI.  We bias slightly DARKER than login so painted ground
+    // continues to pop.
     const grad = c.createRadialGradient(SIZE/2, SIZE/2, 0, SIZE/2, SIZE/2, SIZE * 0.75);
-    grad.addColorStop(0, "#0c0a18");
-    grad.addColorStop(1, "#040308");
+    grad.addColorStop(0, "#070512");
+    grad.addColorStop(1, "#020106");
     c.fillStyle = grad;
     c.fillRect(0, 0, SIZE, SIZE);
     // Distant dust stars (1 px, dim).
@@ -933,6 +1221,25 @@
         ctx.drawImage(starfieldPattern, dx * STAR_PX + sOffX, dy * STAR_PX + sOffY);
       }
     }
+
+    // ---- aurora veils — two slow-drifting violet/gold blobs that wash
+    // across the void. Adds the painterly "majestic" feel without
+    // touching painted ground. Drawn over the star tile but BEFORE
+    // world layers so painted dirt still stamps cleanly.
+    const t = performance.now() / 1000;
+    drawAuroraBlob( window.innerWidth * 0.30 + Math.sin(t * 0.07) * 80,
+                    window.innerHeight * 0.35 + Math.cos(t * 0.05) * 60,
+                    Math.max(window.innerWidth, window.innerHeight) * 0.55,
+                    "rgba(176,112,255,0.10)", "rgba(176,112,255,0)");
+    drawAuroraBlob( window.innerWidth * 0.72 + Math.cos(t * 0.06) * 70,
+                    window.innerHeight * 0.65 + Math.sin(t * 0.04) * 50,
+                    Math.max(window.innerWidth, window.innerHeight) * 0.50,
+                    "rgba(246,228,163,0.08)", "rgba(246,228,163,0)");
+
+    // ---- drifting violet & gold motes (foreground void particles).
+    // Seeded once and reused; each mote drifts on its own slow vector.
+    if (!state.starParticles) state.starParticles = seedStarParticles(64);
+    drawStarParticles(t);
 
     if (!state.world) return;
 
@@ -1048,11 +1355,15 @@
     state.fx.pops = live;
   }
 
-  // Mana Bolt beam — a glowing arcane lance that grows from the caster's
-  // position toward the impact point at the spell's flight speed, then
-  // briefly hangs in the air and fades. Width and brightness scale with
-  // the caster's channeled Output, so a 100% bolt looks much heavier
-  // than a 10% poke.
+  // Mana Bolt — a TRAVELING violet/gold ball (NOT a beam).  It launches
+  // from the caster's position, flies along the cast lane at the spell's
+  // travel speed, leaves a fading gold trail, and pops on impact.  Per
+  // design doc §14/§18 the projectile is sized & brightened by the
+  // caster's Output dial so a 100% bolt feels much weightier.
+  //
+  // The trail is rendered as a soft alpha-falling line BEHIND the ball,
+  // built from the same straight-line segment using a per-segment dash
+  // gradient (cheap — no real particle physics needed).
   function drawBolts(tilePx) {
     const now = performance.now();
     const live = [];
@@ -1060,45 +1371,84 @@
       const age = now - b.t0;
       if (age > b.travelMs + b.fadeMs) continue;
       live.push(b);
+
       const flightP = Math.min(1, age / Math.max(1, b.travelMs));
       const fadeAmt = age > b.travelMs ? Math.min(1, (age - b.travelMs) / b.fadeMs) : 0;
-      const alpha = 1 - fadeAmt * 0.95;
-      const a = worldToScreen(b.fromX, b.fromY, tilePx);
-      const tipWX = b.fromX + (b.toX - b.fromX) * flightP;
-      const tipWY = b.fromY + (b.toY - b.fromY) * flightP;
-      const tip   = worldToScreen(tipWX, tipWY, tilePx);
+      const alpha = 1 - fadeAmt * 0.9;
       const out   = b.output;
-      const lw    = (3 + out * 4) * (1 - fadeAmt * 0.5);
+
+      // Current ball position in screen space, plus a TRAILING anchor
+      // (~0.7 tiles back along the lane) for the comet tail.
+      const ballWX = b.fromX + (b.toX - b.fromX) * flightP;
+      const ballWY = b.fromY + (b.toY - b.fromY) * flightP;
+      const dxw = b.toX - b.fromX, dyw = b.toY - b.fromY;
+      const lw = Math.hypot(dxw, dyw) || 1;
+      const ux = dxw / lw, uy = dyw / lw;
+      const trailLen = 0.7 + out * 1.1;          // tiles of gold tail
+      const tailWX = ballWX - ux * trailLen;
+      const tailWY = ballWY - uy * trailLen;
+
+      const ball = worldToScreen(ballWX, ballWY, tilePx);
+      const tail = worldToScreen(tailWX, tailWY, tilePx);
+      const ballR = (tilePx * 0.18) + out * (tilePx * 0.22);
 
       ctx.save();
       ctx.lineCap = "round";
-      // Outer glow
-      ctx.globalAlpha = 0.55 * alpha;
-      ctx.strokeStyle = "rgba(140, 200, 255, 1)";
-      ctx.lineWidth = lw + 6;
-      ctx.shadowColor = "rgba(120, 180, 255, 0.9)";
+
+      // ---- gold trail — a wide soft segment that fades with age ------
+      const trail = ctx.createLinearGradient(tail.sx, tail.sy, ball.sx, ball.sy);
+      trail.addColorStop(0.00, "rgba(246,228,163,0)");
+      trail.addColorStop(0.55, `rgba(246,228,163,${0.55 * alpha})`);
+      trail.addColorStop(1.00, `rgba(255,236,180,${0.85 * alpha})`);
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = ballR * 1.05;
+      ctx.shadowColor = "rgba(246,228,163,0.65)";
+      ctx.shadowBlur = 10 + out * 12;
+      ctx.beginPath();
+      ctx.moveTo(tail.sx, tail.sy);
+      ctx.lineTo(ball.sx, ball.sy);
+      ctx.stroke();
+
+      // ---- violet outer halo around the ball -------------------------
+      ctx.shadowBlur = 0;
+      const halo = ctx.createRadialGradient(ball.sx, ball.sy, 0, ball.sx, ball.sy, ballR * 2.4);
+      halo.addColorStop(0.00, `rgba(176,112,255,${0.85 * alpha})`);
+      halo.addColorStop(0.45, `rgba(143,90,230,${0.55 * alpha})`);
+      halo.addColorStop(1.00, `rgba(60,30,110,0)`);
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(ball.sx, ball.sy, ballR * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ---- blue inner shell ------------------------------------------
+      ctx.fillStyle = `rgba(91,140,255,${alpha})`;
+      ctx.shadowColor = "rgba(91,140,255,0.85)";
       ctx.shadowBlur = 14 + out * 10;
       ctx.beginPath();
-      ctx.moveTo(a.sx, a.sy);
-      ctx.lineTo(tip.sx, tip.sy);
-      ctx.stroke();
-      // Hot core
+      ctx.arc(ball.sx, ball.sy, ballR * 1.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ---- hot bright core (gold-white) ------------------------------
       ctx.shadowBlur = 0;
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = "rgba(245, 248, 255, 1)";
-      ctx.lineWidth = lw;
+      ctx.fillStyle = `rgba(255,250,225,${alpha})`;
       ctx.beginPath();
-      ctx.moveTo(a.sx, a.sy);
-      ctx.lineTo(tip.sx, tip.sy);
-      ctx.stroke();
-      // Tip flare on impact
+      ctx.arc(ball.sx, ball.sy, ballR * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ---- impact burst on landing -----------------------------------
       if (flightP >= 1) {
-        ctx.globalAlpha = (1 - fadeAmt) * 0.8;
-        ctx.fillStyle = "rgba(180, 220, 255, 1)";
+        const burstA = (1 - fadeAmt);
+        const burstR = ballR * (1.6 + (1 - fadeAmt) * 1.5);
+        const burst = ctx.createRadialGradient(ball.sx, ball.sy, 0, ball.sx, ball.sy, burstR);
+        burst.addColorStop(0.00, `rgba(255,236,180,${0.95 * burstA})`);
+        burst.addColorStop(0.40, `rgba(176,112,255,${0.55 * burstA})`);
+        burst.addColorStop(1.00, `rgba(60,30,110,0)`);
+        ctx.fillStyle = burst;
         ctx.beginPath();
-        ctx.arc(tip.sx, tip.sy, 6 + out * 8, 0, Math.PI * 2);
+        ctx.arc(ball.sx, ball.sy, burstR, 0, Math.PI * 2);
         ctx.fill();
       }
+
       ctx.restore();
     }
     state.fx.bolts = live;
@@ -1148,22 +1498,24 @@
     } else {
       drawCirclePip(rec, cx, cy, tilePx, isSelf);
     }
-    // Name plate (gold ring on selection, lighter for self)
+    // Name plate — small enough to read as a banner OVER the player's
+    // head (it used to drift well above the avatar and dominate the
+    // canvas). 10 px Cinzel, 12 px tall pill, anchored ~1.7 tiles above
+    // the player center per design doc §8.
     const label = rec.name + (rec.isAdmin ? " ✦" : "");
-    ctx.font = "600 12px 'Cinzel', 'Cormorant Garamond', serif";
-    const w = ctx.measureText(label).width + 12;
-    const ny = cy - tilePx * 0.85 - 14;
-    // panel
+    ctx.font = "600 10px 'Cinzel', 'Cormorant Garamond', serif";
+    const w = ctx.measureText(label).width + 10;
+    const ny = cy - tilePx * 1.7 - 14;
     ctx.fillStyle = "rgba(10,10,18,0.82)";
-    ctx.fillRect(cx - w / 2, ny, w, 16);
+    ctx.fillRect(cx - w / 2, ny, w, 13);
     ctx.strokeStyle = isSelf ? "rgba(246,228,163,0.7)"
                               : "rgba(217,166,74,0.35)";
     ctx.lineWidth = 1;
-    ctx.strokeRect(cx - w / 2 + 0.5, ny + 0.5, w - 1, 15);
+    ctx.strokeRect(cx - w / 2 + 0.5, ny + 0.5, w - 1, 12);
     ctx.fillStyle = isSelf ? "#f6e4a3" : (rec.isAdmin ? "#f6e4a3" : "#e9dfc6");
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, cx, ny + 8);
+    ctx.fillText(label, cx, ny + 7);
     ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   }
   function drawCirclePip(rec, cx, cy, tilePx, isSelf) {
@@ -1380,30 +1732,53 @@
     try { state.ws.send(JSON.stringify({ type: "attack", facing })); } catch {}
   }
 
-  // Slot-2 cast — Mana Bolt for now. The dial-in `output` (5–100%) is sent
-  // as a unit float; server pays the mana, picks the first target in the
-  // lane in front of us, and broadcasts a {bolt} for everyone to render.
-  // Aim follows the CURSOR, not the player's movement facing — clicking
-  // to your right while facing left auto-rotates the caster and fires
-  // east. The dominant axis between the cursor and the player picks one
-  // of the four cardinal facings, matching the server's VALID_FACINGS.
-  function aimFacingFromCursor() {
-    if (!state.me) return state.me?.facing || "down";
+  // Equip / unequip a slot-2 spell (Mana Bolt today; user-defined spells
+  // later via the wizard).  Pressing the hotkey again with the same spell
+  // already equipped puts the hand back down.  No casting occurs here —
+  // see mousedown/mouseup above for that.
+  function toggleEquipSpell(spell) {
+    if (state.equippedSpell === spell) {
+      state.equippedSpell = "";
+      hbSlot2 && hbSlot2.removeAttribute("data-equipped");
+      chat(`Mana Bolt sheathed.`, "cmd");
+    } else {
+      state.equippedSpell = spell;
+      hbSlot2 && hbSlot2.setAttribute("data-equipped", "true");
+      chat(`Mana Bolt drawn — left-click taps (20%), right-click charges to Output.`, "cmd");
+    }
+  }
+
+  // Slot-2 cast.  The cursor gives a full 360° aim vector that we forward
+  // to the server, plus the cardinal facing the sprite should rotate to
+  // (the avatar art only has four facings).  Output is normalized into a
+  // 0.05..1 unit float and capped server-side again.
+  function aimFromCursor() {
+    if (!state.me) return { facing: "down", aimX: 0, aimY: 1 };
     const dx = (state.mouse.worldX || 0) - (state.me.x || 0);
     const dy = (state.mouse.worldY || 0) - (state.me.y || 0);
-    if (Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) return state.me.facing || "down";
-    return Math.abs(dx) > Math.abs(dy)
+    const len = Math.hypot(dx, dy);
+    if (len < 0.05) {
+      const f = state.me.facing || "down";
+      const v = { up: [0,-1], down: [0,1], left: [-1,0], right: [1,0] }[f];
+      return { facing: f, aimX: v[0], aimY: v[1] };
+    }
+    const facing = Math.abs(dx) > Math.abs(dy)
       ? (dx > 0 ? "right" : "left")
       : (dy > 0 ? "down"  : "up");
+    return { facing, aimX: dx / len, aimY: dy / len };
   }
-  function sendCast(spell) {
+  function sendCast(spell, outputOverride) {
     if (!state.wsReady || !state.me) return;
-    const facing = aimFacingFromCursor();
-    // Snap the local avatar so the rotation is felt immediately — the
-    // server will echo the same facing on the next state tick.
-    state.me.facing = facing;
-    const output = Math.max(0.05, Math.min(1, (state.output || 100) / 100));
-    try { state.ws.send(JSON.stringify({ type: "cast", spell, facing, output })); } catch {}
+    const { facing, aimX, aimY } = aimFromCursor();
+    state.me.facing = facing;          // snap local sprite immediately
+    const output = (typeof outputOverride === "number")
+      ? Math.max(0.05, Math.min(1, outputOverride))
+      : Math.max(0.05, Math.min(1, (state.output || 100) / 100));
+    try {
+      state.ws.send(JSON.stringify({
+        type: "cast", spell, facing, output, aimX, aimY,
+      }));
+    } catch {}
   }
 
   let lastTickTime = 0;
@@ -1720,6 +2095,9 @@
 
     refreshBars();
     drawHudPortrait();
+    // Plate may have just become visible — re-pin the Output meter so
+    // it sits above the freshly-measured hotbar.
+    positionOutputMeter();
   }
 
   // ---- HUD portrait ---------------------------------------------------
@@ -1906,10 +2284,30 @@
   function refreshOutput() {
     outFill.style.width = state.output + "%";
     outNum.textContent  = state.output + "%";
-    // Glow the meter when the player is dialing back from full power so
-    // the change is visible without staring at the number.
-    outputBox.classList.toggle("is-charging", state.output < 100);
+    // The .is-charging class is owned by the actual right-click charge
+    // (mousedown/up handlers), not by the dial value, so we don't toggle
+    // it here.
   }
+
+  // Pin the Output meter just above the bottom hotbar plate.  The plate
+  // height changes on narrow viewports, so we measure the live element
+  // each time instead of hard-coding a CSS variable. Called on resize and
+  // immediately after applyCharacterToHud so first paint is correct.
+  const hotbarEl = document.querySelector(".plate-hotbar");
+  function positionOutputMeter() {
+    if (!outputBox || !hotbarEl) return;
+    const r = hotbarEl.getBoundingClientRect();
+    if (!r || !r.width) return;
+    // 10 px gap so the meter visibly floats above the slots without
+    // crowding them.
+    const bottom = Math.max(8, window.innerHeight - r.top + 10);
+    outputBox.style.bottom = bottom + "px";
+    // Center the meter horizontally over the hotbar specifically.
+    outputBox.style.left = (r.left + r.width / 2) + "px";
+    outputBox.style.transform = "translateX(-50%)";
+    outputBox.style.right = "auto";
+  }
+  window.addEventListener("resize", positionOutputMeter);
 
   // ---- chat collapse ----
   function setChatCollapsed(c) {
@@ -2145,6 +2543,10 @@
     await spritesPromise.catch(() => {});
     connectSocket();
     if (!raf) raf = requestAnimationFrame(tick);
+    // Position once on enter, and again on the next frame so the layout
+    // is settled before we measure.
+    positionOutputMeter();
+    requestAnimationFrame(positionOutputMeter);
   }
   function leave() {
     realmEl.hidden = true;

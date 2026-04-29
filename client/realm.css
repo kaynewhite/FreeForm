@@ -24,11 +24,13 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: #06070b;
+  /* Match the login void backdrop, just a hair darker so the world's
+     painted ground reads cleanly against it. */
+  background: #040308;
   color: var(--ink);
   overflow: hidden;
   font-family: var(--font-script, "Cormorant Garamond", serif);
-  --hud-h: 134px;          /* total bottom-HUD height (incl. corner trim) */
+  --hud-h: 116px;          /* total bottom-HUD height (incl. corner trim) */
   --rail-w: 52px;          /* right-rail Codex width */
 }
 .realm-canvas {
@@ -359,10 +361,12 @@
 .hud-chat {
   position: absolute;
   left: 12px;
-  /* Sit above the bottom HUD with breathing room. */
-  bottom: calc(var(--hud-h) + 18px);
-  width: min(320px, 26vw);
-  max-height: 30vh;
+  /* Pinned to the bottom-left corner so it never tucks behind the HUD plate.
+     The plate is centered, so a left-edge chat at the same baseline shares
+     vertical space without overlap on any sane viewport. */
+  bottom: 12px;
+  width: min(340px, 26vw);
+  max-height: calc(var(--hud-h) + 32vh);
   display: flex;
   flex-direction: column;
   background:
@@ -556,13 +560,16 @@
    ╚═══════════════════════════════════════════════════════════╝ */
 .hud-output {
   position: absolute;
+  /* Anchored over the hotbar via JS — see positionOutputMeter() in
+     realm.js. We seed sensible defaults so the box still appears if the
+     JS positioning hasn't run yet (e.g. before the first frame). */
   left: 50%;
-  bottom: calc(var(--hud-h) + 12px);
+  bottom: calc(var(--hud-h) + 8px);
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.35rem 0.85rem;
+  padding: 0.3rem 0.7rem;
   background: linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
   border: 1px solid var(--gold-deep);
   border-radius: 3px;
@@ -582,8 +589,8 @@
 }
 .ho-track {
   position: relative;
-  width: 220px;
-  height: 10px;
+  width: 180px;
+  height: 9px;
   background: rgba(0,0,0,0.55);
   border: 1px solid var(--gold-deep);
   border-radius: 1px;
@@ -1519,7 +1526,7 @@
   .plate-bars { flex: 0 0 200px; }
   .hb-slot { width: 46px; height: 46px; }
   .hb-slot .hb-icon { font-size: 1.4rem; }
-  .hud-chat { width: min(320px, 36vw); bottom: calc(var(--hud-h) + 16px); }
+  .hud-chat { width: min(320px, 36vw); bottom: 12px; }
   .hud-atlas { width: 180px; right: calc(var(--rail-w) + 22px); }
   .modal-body--map { grid-template-columns: 1fr; }
   .modal-body--char { grid-template-columns: 1fr; }
@@ -1532,4 +1539,245 @@
   .hud-atlas { display: none; }
   .hud-chat { width: min(90vw, 420px); bottom: 14px; max-height: 50vh; }
   .crown-badge .cb-mode, .crown-badge .cb-label { display: none; }
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ TOME OF LORE — full §27 command catalog                   ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.modal-body--help { max-height: 70vh; overflow-y: auto; padding: 0.9rem 1.4rem 1.4rem; }
+.modal-body--help::-webkit-scrollbar { width: 8px; }
+.modal-body--help::-webkit-scrollbar-thumb { background: var(--gold-3, #8a6a25); border-radius: 4px; }
+.help-section {
+  margin-top: 0.6rem;
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  background: rgba(0,0,0,0.3);
+  padding: 0.4rem 0.7rem;
+}
+.help-summary {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.9rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+  cursor: pointer;
+  padding: 0.4rem 0.2rem;
+  list-style: none;
+}
+.help-summary::marker { color: var(--gold-1); }
+.help-summary em { color: var(--ink-mute); font-style: normal; font-size: 0.7em; margin-left: 0.4em; }
+.cmd-table { padding: 0.5rem 0.2rem 0.4rem; }
+.cmd-table h4 {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+  margin: 1rem 0 0.35rem;
+  padding-bottom: 0.2rem;
+  border-bottom: 1px dashed var(--gold-deep);
+}
+.cmd-table h4:first-child { margin-top: 0.3rem; }
+.cmd-table ul { list-style: none; padding: 0; margin: 0; }
+.cmd-table li {
+  padding: 0.18rem 0;
+  font-family: var(--font-body, "Cormorant Garamond", serif);
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.cmd-table li code {
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  padding: 0.05rem 0.4rem;
+  border-radius: 2px;
+  color: var(--gold-1);
+  font-family: monospace;
+  font-size: 0.86rem;
+  margin-right: 0.25rem;
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ SPELL-CREATION WIZARD                                     ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.spellwiz-body { display: grid; grid-template-columns: 180px 1fr; gap: 0; padding: 0; }
+.spellwiz-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0.9rem 0.6rem 0.9rem 1.1rem;
+  border-right: 1px solid var(--gold-deep);
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  counter-reset: sw-step;
+}
+.spellwiz-stepper li {
+  position: relative;
+  padding: 0.35rem 0.4rem 0.35rem 1.7rem;
+  color: var(--ink-mute);
+  border-radius: 2px;
+  counter-increment: sw-step;
+}
+.spellwiz-stepper li::before {
+  content: counter(sw-step);
+  position: absolute;
+  left: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.05rem;
+  height: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  border: 1px solid var(--gold-deep);
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: var(--gold-1);
+}
+.spellwiz-stepper li.is-current {
+  color: var(--gold-1);
+  background: rgba(246,228,163,0.07);
+}
+.spellwiz-stepper li.is-current::before {
+  background: linear-gradient(180deg, #f6e4a3, #caa24a);
+  color: #1d150a;
+  border-color: #7a5a1f;
+  box-shadow: 0 0 8px rgba(246,228,163,0.55);
+}
+.spellwiz-stepper li.is-done {
+  color: var(--ink-soft);
+}
+.spellwiz-stepper li.is-done::before { color: var(--gold-2); }
+
+.spellwiz-pages {
+  position: relative;
+  padding: 0.9rem 1.1rem;
+  min-height: 360px;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+.spellwiz-page { display: none; }
+.spellwiz-page.is-current { display: block; animation: sw-fade 200ms ease-out; }
+@keyframes sw-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.spellwiz-page h3 {
+  margin: 0 0 0.7rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.88rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+  border-bottom: 1px solid var(--gold-deep);
+  padding-bottom: 0.4rem;
+}
+.sw-row {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.sw-row--col { grid-template-columns: 1fr; gap: 0.25rem; align-items: start; }
+.sw-row--check { grid-template-columns: 9rem auto; }
+.sw-row input[type="text"],
+.sw-row input[type="number"],
+.sw-row input[type="color"],
+.sw-row input[type="range"],
+.sw-row select,
+.sw-row textarea {
+  background: rgba(0,0,0,0.5);
+  color: var(--ink);
+  border: 1px solid var(--gold-deep);
+  padding: 0.4rem 0.55rem;
+  font-family: var(--font-body, "Cormorant Garamond", serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  border-radius: 2px;
+  width: 100%;
+  outline: none;
+}
+.sw-row input[type="color"] { padding: 0.15rem; height: 2rem; cursor: pointer; }
+.sw-row input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: #d8b257; }
+.sw-row input:focus,
+.sw-row select:focus,
+.sw-row textarea:focus {
+  border-color: var(--gold-1);
+  box-shadow: 0 0 8px rgba(246,228,163,0.35);
+}
+.spellwiz-review {
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  padding: 0.7rem 0.9rem;
+  border-radius: 2px;
+  font-family: monospace;
+  font-size: 0.82rem;
+  color: var(--gold-1);
+  white-space: pre-wrap;
+  max-height: 38vh;
+  overflow-y: auto;
+}
+.spellwiz-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 1.1rem;
+  border-top: 1px solid var(--gold-deep);
+  background: rgba(0,0,0,0.35);
+}
+.spellwiz-foot .sw-progress {
+  margin-left: auto;
+  margin-right: auto;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.spellwiz-foot .ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--gold-deep);
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.spellwiz-foot .ghost:hover:not(:disabled) { color: var(--gold-1); border-color: var(--gold-2); }
+.spellwiz-foot .ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+.spellwiz-foot .ghost--gold {
+  background: linear-gradient(180deg, #f6e4a3, #caa24a);
+  color: #1d150a;
+  border-color: #7a5a1f;
+  box-shadow: 0 0 12px rgba(246,228,163,0.45);
+}
+.spellwiz-foot .ghost--gold:hover { box-shadow: 0 0 18px rgba(246,228,163,0.7); }
+
+/* Hotbar slot 2 — "equipped" state when Mana Bolt is active. */
+.hb-slot[data-equipped="true"] {
+  border-color: #b070ff;
+  box-shadow: 0 0 14px rgba(176,112,255,0.7), inset 0 0 12px rgba(176,112,255,0.4);
+  animation: hb-equipped-pulse 2.4s ease-in-out infinite;
+}
+.hb-slot[data-equipped="true"] .hb-icon {
+  color: #ddc0ff;
+  text-shadow: 0 0 10px rgba(176,112,255,0.85);
+}
+@keyframes hb-equipped-pulse {
+  0%,100% { box-shadow: 0 0 14px rgba(176,112,255,0.55), inset 0 0 12px rgba(176,112,255,0.35); }
+  50%     { box-shadow: 0 0 22px rgba(176,112,255,0.9),  inset 0 0 16px rgba(176,112,255,0.55); }
 }

@@ -383,7 +383,14 @@ function init(server, sessionSecret) {
         if (!shard) break;
         const spellKey = String(msg.spell || "");
         const output = clampUnit(typeof msg.output === "number" ? msg.output : 1);
-        tryCast(shard, player, spellKey, Math.max(0.05, Math.min(1, output)));
+        // 360° aim — client supplies a unit vector toward the cursor.
+        // The four-cardinal `facing` still drives the sprite; this aim
+        // vector drives the actual hit lane so a bolt can fly NE / SW /
+        // anywhere in between, not just N/E/S/W.
+        let aimX = (typeof msg.aimX === "number") ? msg.aimX : null;
+        let aimY = (typeof msg.aimY === "number") ? msg.aimY : null;
+        tryCast(shard, player, spellKey,
+                Math.max(0.05, Math.min(1, output)), aimX, aimY);
         break;
       }
       case "ping":
@@ -476,7 +483,7 @@ function init(server, sessionSecret) {
   // Same shape as melee but with a longer, narrower hit-box (a "lane"
   // out in front of the caster) and mana cost / damage both scaled by
   // the player's channeled Output. Currently only `mana_bolt` is wired.
-  function tryCast(shard, caster, spellKey, output) {
+  function tryCast(shard, caster, spellKey, output, aimX, aimY) {
     if (caster.dead) return;
     const spell = SPELL[spellKey];
     if (!spell) return;
@@ -511,7 +518,16 @@ function init(server, sessionSecret) {
     const power = spell.power || 1.0;
     const dmg = Math.max(1, Math.round(baseUnit * output * power * lvScale * dmgMult));
 
-    const fv = FACING_VEC[caster.facing] || FACING_VEC.down;
+    // Lane direction — prefer the 360° aim vector from the cursor over
+    // the cardinal facing so a bolt can fly NE / SW / anywhere in between
+    // even though the sprite still snaps to four cardinals.  Reject zero
+    // / non-finite vectors and fall back to the facing.
+    let fv;
+    if (Number.isFinite(aimX) && Number.isFinite(aimY)) {
+      const len = Math.hypot(aimX, aimY);
+      if (len > 0.001) fv = { x: aimX / len, y: aimY / len };
+    }
+    if (!fv) fv = FACING_VEC[caster.facing] || FACING_VEC.down;
     const px = -fv.y, py = fv.x;
     // Walk the line and pick the FIRST living player in the lane —
     // bolts are lance-line, not piercing. (Future spells can iterate.)

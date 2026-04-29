@@ -453,10 +453,12 @@
         <label class="ctrl">
           <span>Fill</span>
           <select id="palette-fill-mode" title="Pick a fill rule, then press Apply.">
-            <option value="empty">Empty tiles only</option>
-            <option value="edges">Visible edges</option>
-            <option value="same">Replace same as cursor</option>
-            <option value="all">Every visible tile</option>
+            <option value="empty">Viewport — empty tiles</option>
+            <option value="edges">Viewport — visible edges</option>
+            <option value="same">Viewport — replace same as cursor</option>
+            <option value="all">Viewport — every visible tile</option>
+            <option value="world">Whole world — every painted tile</option>
+            <option value="world-edges">Whole world — outer edges only</option>
           </select>
         </label>
         <button class="ghost" id="palette-fill-btn" type="button" title="Apply fill across the visible viewport.">Apply Fill</button>
@@ -675,25 +677,346 @@
         <header class="modal-head">
           <span class="modal-glyph" aria-hidden="true">✒</span>
           <h2 class="modal-title">Tome of Lore</h2>
+          <span class="modal-sub">Hotkeys, spellcraft, and the Architect's hand</span>
           <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
         </header>
-        <div class="modal-body">
-          <h3 class="sb-title">Movement</h3>
+        <div class="modal-body modal-body--help">
+          <h3 class="sb-title">Movement &amp; sight</h3>
           <ul class="help-list">
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — walk · <kbd>Shift</kbd> — sprint</li>
+            <li>Mouse — face the cursor (4 cardinal directions)</li>
             <li>Mouse wheel — channel <em>Output</em> (player) / zoom (editor)</li>
           </ul>
-          <h3 class="sb-title">Voice &amp; menus</h3>
+
+          <h3 class="sb-title">Spellcraft</h3>
+          <ul class="help-list">
+            <li><kbd>2</kbd> — equip / unequip <strong>Mana Bolt</strong> (no auto-fire)</li>
+            <li>Wheel — set <em>Output %</em> (1–100); cost &amp; damage scale together</li>
+            <li>Left-click — instant tap-cast at fixed 20% Output</li>
+            <li>Right-click hold — charge to your current Output%; release to cast</li>
+            <li>Mana Bolt is a 360° lane traveling the violet/gold projectile to the cursor</li>
+          </ul>
+
+          <h3 class="sb-title">Voice &amp; codices</h3>
           <ul class="help-list">
             <li><kbd>T</kbd> — speak · <kbd>Enter</kbd> — send · <kbd>Esc</kbd> — close panels / leave chat</li>
             <li><kbd>M</kbd> Atlas · <kbd>C</kbd> Vessel · <kbd>I</kbd> Satchel · <kbd>K</kbd> Spellbook · <kbd>J</kbd> Quests · <kbd>H</kbd> Tome</li>
           </ul>
-          <h3 class="sb-title">Architect commands</h3>
-          <ul class="help-list">
-            <li><code>/command we</code> — toggle the live tile editor</li>
-            <li><code>/command world_edit</code> · <code>/command server_edit</code> — same, longer aliases</li>
-            <li><code>/leave</code> — return to the character sheet</li>
-          </ul>
+
+          <details class="help-section" open>
+            <summary class="help-summary">Architect commands — <em>full catalog (§27)</em></summary>
+
+            <div class="cmd-table">
+              <h4>27.1 · Editor &amp; world-edit</h4>
+              <ul>
+                <li><code>/command we</code> · <code>/command world_edit</code> · <code>/command server_edit</code> — toggle live tile editor</li>
+                <li><code>/command palette</code> — open / close the tile palette</li>
+                <li><code>/command grid</code> — toggle editor grid overlay</li>
+                <li><code>/command coords</code> — toggle coordinate readout</li>
+              </ul>
+
+              <h4>27.2 · Teleport &amp; vantage</h4>
+              <ul>
+                <li><code>/tp x y</code> — teleport to tile (x, y)</li>
+                <li><code>/tp here</code> — drop a marker at your feet</li>
+                <li><code>/tp origin</code> — return to the realm origin (0, 0)</li>
+                <li><code>/tp soul &lt;name&gt;</code> — warp to another player</li>
+                <li><code>/tp shard &lt;n&gt;</code> — jump to shard <em>n</em></li>
+              </ul>
+
+              <h4>27.3 · Time &amp; weather</h4>
+              <ul>
+                <li><code>/time set day|night|dawn|dusk</code></li>
+                <li><code>/time scale &lt;n&gt;</code> — accelerate the world clock</li>
+                <li><code>/weather clear|rain|storm|aurora</code></li>
+              </ul>
+
+              <h4>27.4 · Souls &amp; presence</h4>
+              <ul>
+                <li><code>/souls</code> — list every soul on the shard</li>
+                <li><code>/whisper &lt;name&gt; &lt;msg&gt;</code> — private voice</li>
+                <li><code>/kick &lt;name&gt;</code> · <code>/ban &lt;name&gt;</code> · <code>/pardon &lt;name&gt;</code></li>
+                <li><code>/mute &lt;name&gt;</code> · <code>/unmute &lt;name&gt;</code></li>
+              </ul>
+
+              <h4>27.5 · Vessel &amp; vitals</h4>
+              <ul>
+                <li><code>/heal [name]</code> · <code>/refill [name]</code> — restore HP / MP / Stamina</li>
+                <li><code>/setlevel &lt;n&gt;</code> · <code>/setxp &lt;n&gt;</code></li>
+                <li><code>/sethp &lt;n&gt;</code> · <code>/setmp &lt;n&gt;</code> · <code>/setst &lt;n&gt;</code></li>
+                <li><code>/godmode on|off</code></li>
+              </ul>
+
+              <h4>27.6 · Inventory &amp; gold</h4>
+              <ul>
+                <li><code>/give &lt;item&gt; [n]</code> · <code>/take &lt;item&gt; [n]</code></li>
+                <li><code>/gold &lt;n&gt;</code> — set carried gold</li>
+                <li><code>/clearbag</code> — empty the satchel</li>
+              </ul>
+
+              <h4>27.7 · Spells &amp; channels</h4>
+              <ul>
+                <li><code>/command create_spell</code> — open the 11-step spell wizard</li>
+                <li><code>/spell give &lt;id&gt; [name]</code> — grant a spell to a soul</li>
+                <li><code>/spell list</code> — list known spells</li>
+                <li><code>/spell forget &lt;id&gt;</code> — revoke a spell</li>
+                <li><code>/cast &lt;id&gt;</code> — force-cast for testing</li>
+              </ul>
+
+              <h4>27.8 · World shape &amp; tilesets</h4>
+              <ul>
+                <li><code>/world resize &lt;w&gt; &lt;h&gt;</code></li>
+                <li><code>/world bounds show|hide</code></li>
+                <li><code>/tileset reload</code> · <code>/tileset list</code></li>
+                <li><code>/layer show|hide &lt;name&gt;</code></li>
+              </ul>
+
+              <h4>27.9 · Shards &amp; persistence</h4>
+              <ul>
+                <li><code>/shard new &lt;name&gt;</code> · <code>/shard list</code></li>
+                <li><code>/shard publish</code> · <code>/shard unpublish</code></li>
+                <li><code>/save</code> — flush world to disk · <code>/snapshot &lt;tag&gt;</code></li>
+              </ul>
+
+              <h4>27.10 · NPCs &amp; mobs</h4>
+              <ul>
+                <li><code>/spawn &lt;npc&gt; [n]</code> · <code>/despawn &lt;npc|all&gt;</code></li>
+                <li><code>/npc list</code> · <code>/npc tame &lt;name&gt;</code></li>
+              </ul>
+
+              <h4>27.11 · Quests &amp; lore</h4>
+              <ul>
+                <li><code>/quest start &lt;id&gt;</code> · <code>/quest finish &lt;id&gt;</code></li>
+                <li><code>/quest list</code> · <code>/quest reset &lt;id&gt;</code></li>
+              </ul>
+
+              <h4>27.12 · Voice channels</h4>
+              <ul>
+                <li><code>/say</code> (default) · <code>/yell</code> · <code>/party</code> · <code>/global</code></li>
+                <li><code>/me &lt;action&gt;</code> — emote in the third person</li>
+              </ul>
+
+              <h4>27.13 · Camera &amp; render</h4>
+              <ul>
+                <li><code>/cam zoom &lt;n&gt;</code> · <code>/cam vantage high|low</code></li>
+                <li><code>/cam shake &lt;n&gt;</code> · <code>/fps show|hide</code></li>
+              </ul>
+
+              <h4>27.14 · Audio</h4>
+              <ul>
+                <li><code>/mute ambient|music|sfx</code> · <code>/unmute …</code></li>
+                <li><code>/volume &lt;0-100&gt;</code></li>
+              </ul>
+
+              <h4>27.15 · Diagnostics</h4>
+              <ul>
+                <li><code>/ping</code> — round-trip latency</li>
+                <li><code>/whoami</code> · <code>/where</code> · <code>/uptime</code></li>
+                <li><code>/dump tiles|souls|spells</code></li>
+              </ul>
+
+              <h4>27.16 · Macros</h4>
+              <ul>
+                <li><code>/macro save &lt;name&gt; &lt;cmd…&gt;</code></li>
+                <li><code>/macro run &lt;name&gt;</code> · <code>/macro list</code> · <code>/macro forget &lt;name&gt;</code></li>
+              </ul>
+
+              <h4>27.17 · Session</h4>
+              <ul>
+                <li><code>/leave</code> — return to the character sheet</li>
+                <li><code>/logout</code> — sign out completely</li>
+                <li><code>/clear</code> — clear the chat log</li>
+                <li><code>/help</code> — open this Tome</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spell-Creation Wizard (/command create_spell) — 11 steps per §16 -->
+    <div class="modal" id="modal-spellwiz" data-modal="spellwiz" hidden>
+      <div class="modal-frame modal-frame--narrow">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">✺</span>
+          <h2 class="modal-title">Weave a New Spell</h2>
+          <span class="modal-sub" id="spellwiz-step-label">Step 1 of 11 — Identity</span>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+
+        <div class="modal-body spellwiz-body">
+          <ol class="spellwiz-stepper" id="spellwiz-stepper">
+            <li data-step="1"  class="is-current">Identity</li>
+            <li data-step="2">School</li>
+            <li data-step="3">Form</li>
+            <li data-step="4">Targeting</li>
+            <li data-step="5">Range &amp; Reach</li>
+            <li data-step="6">Lane &amp; Width</li>
+            <li data-step="7">Cost &amp; Cadence</li>
+            <li data-step="8">Effects</li>
+            <li data-step="9">Visuals</li>
+            <li data-step="10">Sound</li>
+            <li data-step="11">Review</li>
+          </ol>
+
+          <div class="spellwiz-pages">
+
+            <section class="spellwiz-page is-current" data-page="1">
+              <h3>Identity</h3>
+              <label class="sw-row"><span>Name</span><input type="text" id="sw-name" maxlength="40" placeholder="Mana Bolt"/></label>
+              <label class="sw-row"><span>ID slug</span><input type="text" id="sw-id" maxlength="40" placeholder="mana_bolt"/></label>
+              <label class="sw-row sw-row--col"><span>Flavor</span><textarea id="sw-flavor" rows="2" maxlength="240" placeholder="A bolt of pure mana that strikes true."></textarea></label>
+              <label class="sw-row"><span>Hotbar slot</span>
+                <select id="sw-slot">
+                  <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+                  <option value="8">8</option><option value="9">9</option><option value="0">0</option>
+                </select>
+              </label>
+            </section>
+
+            <section class="spellwiz-page" data-page="2">
+              <h3>School</h3>
+              <label class="sw-row"><span>School</span>
+                <select id="sw-school">
+                  <option value="arcane">Arcane</option>
+                  <option value="fire">Fire</option>
+                  <option value="frost">Frost</option>
+                  <option value="storm">Storm</option>
+                  <option value="earth">Earth</option>
+                  <option value="nature">Nature</option>
+                  <option value="shadow">Shadow</option>
+                  <option value="light">Light</option>
+                  <option value="blood">Blood</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Tier</span>
+                <select id="sw-tier"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+              </label>
+              <label class="sw-row"><span>Required Control</span><input type="number" id="sw-ctrl" min="1" max="999" value="10"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="3">
+              <h3>Form</h3>
+              <label class="sw-row"><span>Form</span>
+                <select id="sw-form">
+                  <option value="projectile">Projectile (traveling ball)</option>
+                  <option value="beam">Beam (instant lane)</option>
+                  <option value="aoe">Area of effect</option>
+                  <option value="self">Self-buff</option>
+                  <option value="touch">Touch</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Travel speed (tiles/s)</span><input type="number" id="sw-speed" min="0" max="100" step="0.5" value="22"/></label>
+              <label class="sw-row sw-row--check"><span>Pierces souls</span><input type="checkbox" id="sw-pierce"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="4">
+              <h3>Targeting</h3>
+              <label class="sw-row"><span>Aiming</span>
+                <select id="sw-aim">
+                  <option value="cursor360">Cursor — full 360° lane</option>
+                  <option value="cardinal">Cardinal (4 facing)</option>
+                  <option value="self">Self</option>
+                  <option value="ally">Targeted ally</option>
+                  <option value="enemy">Targeted enemy</option>
+                </select>
+              </label>
+              <label class="sw-row sw-row--check"><span>Friendly fire</span><input type="checkbox" id="sw-ff"/></label>
+              <label class="sw-row sw-row--check"><span>Hits self</span><input type="checkbox" id="sw-self-hit"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="5">
+              <h3>Range &amp; Reach</h3>
+              <label class="sw-row"><span>Reach (tiles)</span><input type="number" id="sw-reach" min="0" max="64" step="0.5" value="8"/></label>
+              <label class="sw-row"><span>Min range (tiles)</span><input type="number" id="sw-minrange" min="0" max="32" step="0.5" value="0"/></label>
+              <label class="sw-row"><span>Vision required</span>
+                <select id="sw-los"><option value="line">Line of sight</option><option value="any">Any (blind cast)</option></select>
+              </label>
+            </section>
+
+            <section class="spellwiz-page" data-page="6">
+              <h3>Lane &amp; Width</h3>
+              <label class="sw-row"><span>Lane width (tiles)</span><input type="number" id="sw-width" min="0.1" max="6" step="0.05" value="0.55"/></label>
+              <label class="sw-row"><span>Falloff</span>
+                <select id="sw-falloff"><option value="none">None</option><option value="linear">Linear</option><option value="quadratic">Quadratic</option></select>
+              </label>
+            </section>
+
+            <section class="spellwiz-page" data-page="7">
+              <h3>Cost &amp; Cadence</h3>
+              <label class="sw-row"><span>Base mana cost</span><input type="number" id="sw-cost" min="0" max="9999" value="50"/></label>
+              <label class="sw-row"><span>Cooldown (ms)</span><input type="number" id="sw-cd" min="0" max="120000" step="50" value="0"/></label>
+              <label class="sw-row"><span>Cast time (ms)</span><input type="number" id="sw-cast" min="0" max="120000" step="50" value="0"/></label>
+              <label class="sw-row"><span>Power scalar</span><input type="number" id="sw-power" min="0" max="10" step="0.05" value="1.0"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="8">
+              <h3>Effects</h3>
+              <label class="sw-row"><span>Damage (per cast)</span><input type="number" id="sw-dmg" min="0" max="9999" value="50"/></label>
+              <label class="sw-row"><span>Damage type</span>
+                <select id="sw-dtype">
+                  <option value="arcane">Arcane</option><option value="physical">Physical</option>
+                  <option value="fire">Fire</option><option value="frost">Frost</option>
+                  <option value="shadow">Shadow</option><option value="holy">Holy</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Status</span>
+                <select id="sw-status">
+                  <option value="">None</option><option value="burn">Burn (DoT)</option>
+                  <option value="freeze">Freeze (slow)</option><option value="stun">Stun</option>
+                  <option value="silence">Silence</option><option value="bleed">Bleed</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Heal (per cast)</span><input type="number" id="sw-heal" min="0" max="9999" value="0"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="9">
+              <h3>Visuals</h3>
+              <label class="sw-row"><span>Glyph</span>
+                <select id="sw-glyph">
+                  <option value="✦">✦ Star</option><option value="✺">✺ Sun</option>
+                  <option value="❖">❖ Diamond</option><option value="⚡">⚡ Bolt</option>
+                  <option value="❄">❄ Frost</option><option value="✿">✿ Bloom</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Core color</span><input type="color" id="sw-color-core" value="#b070ff"/></label>
+              <label class="sw-row"><span>Trail color</span><input type="color" id="sw-color-trail" value="#f6e4a3"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="10">
+              <h3>Sound</h3>
+              <label class="sw-row"><span>Cast cue</span>
+                <select id="sw-snd-cast">
+                  <option value="">— silent —</option>
+                  <option value="hum">Soft hum</option><option value="chime">Bell chime</option>
+                  <option value="whoosh">Whoosh</option><option value="thunder">Thunder roll</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Impact cue</span>
+                <select id="sw-snd-hit">
+                  <option value="">— silent —</option>
+                  <option value="thud">Soft thud</option><option value="crack">Crackle</option>
+                  <option value="boom">Boom</option><option value="shimmer">Shimmer</option>
+                </select>
+              </label>
+              <label class="sw-row"><span>Volume</span><input type="range" id="sw-vol" min="0" max="100" value="70"/></label>
+            </section>
+
+            <section class="spellwiz-page" data-page="11">
+              <h3>Review</h3>
+              <pre class="spellwiz-review" id="sw-review">—</pre>
+              <p class="modal-flavor">When you save, this spell joins your Spellbook on the chosen hotbar slot. Architects can re-edit it any time with <code>/command create_spell</code>.</p>
+            </section>
+
+          </div>
+
+          <footer class="spellwiz-foot">
+            <button class="ghost" id="sw-back" type="button" disabled>← Back</button>
+            <span class="sw-progress" id="sw-progress">1 / 11</span>
+            <button class="ghost" id="sw-next" type="button">Next →</button>
+            <button class="ghost ghost--gold" id="sw-save" type="button" hidden>Inscribe Spell</button>
+          </footer>
         </div>
       </div>
     </div>

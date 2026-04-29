@@ -94,6 +94,37 @@ Sprite-slice and tilemap data live on disk under `data/`, not in Postgres, so ad
   - **Death** — When HP ≤ 0, `slay()` broadcasts `slain{by, name}`, persists `died_at`, and (after a 1.5 s "YOU HAVE FALLEN" parchment veil) kicks the loser's socket with WS code 4001 so they're bounced back to the character forge per the existing permadeath flow.
   - **Spellbook modal** now lists Mana Bolt as available (other spells stay locked).
 
+## Recent overhaul (apr-2026)
+- **Casting flow per design doc §14/§18.** Hotkey `2` *equips* Mana Bolt — it
+  no longer auto-fires. Left-click is a fixed-output (20%) tap-cast; right-click
+  charges to the current Channeled Output dial and releases on mouseup, with
+  the meter pulsing gold while held. The cursor gives a 360° aim vector that
+  the server uses for the lane direction; the sprite still snaps to four
+  cardinals so existing art works untouched. `realm.js#sendCast` adds
+  `aimX/aimY` to the `cast` packet and `server/realtime.js#tryCast` prefers
+  the unit-vector when present.
+- **Mana Bolt projectile** is now a *traveling* violet/gold ball with a fading
+  comet trail — not a beam. Width and brightness scale with Output. See
+  `realm.js#drawBolts`.
+- **Backdrop:** void darker (`#070512` → `#020106`) to match login. Two slow
+  drifting aurora blobs (violet + gold) plus 64 seeded drift-particles render
+  every frame for the "magical realism" feel without painting over ground.
+- **Name plate** shrunk to 10 px Cinzel and re-anchored at `cy − tilePx*1.7 − 14`
+  so it banners *over* the player's head instead of dominating the canvas.
+- **Output meter** is positioned with `getBoundingClientRect` of `.plate-hotbar`
+  so it always sits 10 px above the slots regardless of viewport / plate height.
+- **Hotbar slot 2** gets `data-equipped="true"` while Mana Bolt is drawn — the
+  CSS gives it the equipped purple pulse.
+- **Fill modes** `world` and `world-edges` added — they expand the brush to a
+  bbox of every painted tile across all layers (padded by 8, capped at ±150).
+- **Slash commands** cover §27: `/help` opens the help modal, `/tp x y`,
+  `/goto name`, `/summon name`, `/home/spawn`, `/leave`, plus a generic
+  forwarder so any verb is sent to the server. `/command create_spell` opens
+  the new 11-step inscribe wizard (`#modal-spellwiz`) — Identity → School →
+  Form → Targeting → Range → Lane → Cost → Effects → Visuals → Sound →
+  Review. The wizard emits the spell as a JSON blob into chat for preview
+  (server persistence lands in a follow-up).
+
 ## Next up (per design doc)
 - Wire the Map Workshop's parsed TMX into a tile-aware collision pass so painted walls actually block movement
 - Replace the placeholder circle-avatars with the per-race idle/walk sprite sheets once they exist (uses the same slice pipeline as the portrait)
