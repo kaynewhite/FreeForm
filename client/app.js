@@ -55,6 +55,22 @@
       adminNote.hidden = role !== "admin";
       playerNote.hidden = role === "admin";
     }
+    // Server 0 is admin-only today. Disable the Enter button for non-admins
+    // and explain why in the player note. Admins always see the live button.
+    const enterBtn = $("#enter-btn");
+    if (enterBtn) {
+      const allowed = role === "admin";
+      enterBtn.disabled = !allowed;
+      enterBtn.title = allowed
+        ? "Step into the live realm."
+        : "No published server yet — only the Architect may walk Server 0.";
+      enterBtn.classList.toggle("is-disabled", !allowed);
+      const playerNoteEl = $("#dev-note-player");
+      if (playerNoteEl && !allowed) {
+        playerNoteEl.textContent =
+          "Servers not yet published. The Architect is still weaving Server 0 — your vessel waits for a player shard to open.";
+      }
+    }
   }
 
   // ---- auth tabs / forms ----
@@ -108,6 +124,7 @@
 
   // ---- character flow ----
   let currentRole = "player";
+  let lastCharacter = null;
 
   function configureForge(role) {
     const isAdmin = role === "admin";
@@ -156,9 +173,22 @@
   // The realm view lives in #realm and is owned by client/realm.js. We just
   // hand it the current user (so it knows whether to allow the slash-command
   // editor) and unhide it; the main shell stays in the DOM behind it so a
-  // "Leave the realm" pop returns to the character sheet untouched.
-  $("#enter-btn").addEventListener("click", () => {
-    if (window.FreeformRealm) window.FreeformRealm.enter({ role: currentRole });
+  // "Leave the realm" pop returns to the character sheet untouched. We also
+  // pass the character row so the in-game HUD has stats on first paint
+  // without needing a second round-trip.
+  //
+  // Server 0 is the Architect's canvas — only admins may enter today. A
+  // player-facing shard arrives once /command create_server +
+  // /command world_publish ship; until then the button is disabled with a
+  // gentle note in its place.
+  $("#enter-btn").addEventListener("click", async () => {
+    if (currentRole !== "admin") return;
+    let ch = lastCharacter;
+    if (!ch) {
+      try { const r = await api("/api/characters/me"); ch = r.body.character; }
+      catch { /* realm.js will fetch it itself if we don't have it */ }
+    }
+    if (window.FreeformRealm) window.FreeformRealm.enter({ role: currentRole, character: ch });
   });
   window.addEventListener("freeform:leave-realm", () => {
     // Realm asked to leave — nothing to do, the realm view hid itself and
@@ -317,6 +347,7 @@
   const ADMIN_THEME = { color: "#f6e4a3", glow: "rgba(246,228,163,0.60)" };
 
   function showCharacter(c) {
+    lastCharacter = c;
     const isAdmin = !!c.is_admin;
     const theme = isAdmin ? ADMIN_THEME : (RACE_THEME[c.race] || RACE_THEME.human);
     charCard.style.setProperty("--race-color", theme.color);

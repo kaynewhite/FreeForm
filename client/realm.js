@@ -34,6 +34,41 @@
   const chatForm    = $("#chat-form");
   const chatInput   = $("#chat-input");
 
+  // ---- HUD widgets ----
+  const rbServerName = $("#rb-server-name");
+  const rbMode       = $("#rb-mode");
+  const presenceCt   = $("#presence-count");
+  const minimap      = $("#minimap-canvas");
+  const minimapCtx   = minimap.getContext("2d");
+  minimapCtx.imageSmoothingEnabled = false;
+
+  const statsName    = $("#stats-name");
+  const statsRace    = $("#stats-race");
+  const statsLevel   = $("#stats-level-num");
+  const barHpFill    = $("#bar-hp-fill");
+  const barMpFill    = $("#bar-mp-fill");
+  const barStFill    = $("#bar-st-fill");
+  const barHpNum     = $("#bar-hp-num");
+  const barMpNum     = $("#bar-mp-num");
+  const barStNum     = $("#bar-st-num");
+  const statsXp      = $("#stats-xp");
+  const statsCtrl    = $("#stats-ctrl");
+  const statsRes     = $("#stats-res");
+
+  const hbWeaponIcon = $("#hb-weapon-icon");
+  const hbWeaponName = $("#hb-weapon-name");
+
+  // Per-race weapon glyph for the hotbar slot icon. Vague enough to work in
+  // any system font — real per-weapon art lands when we have spell sheets.
+  const WEAPON_ICON = {
+    Dagger: "†",
+    Club: "🜨",
+    Bow: ")",
+    Slingshot: "Y",
+    Katana: "⚔",
+    "Free Hand": "✦",
+  };
+
   const paletteEl   = $("#realm-palette");
   const paletteBody = $("#palette-body");
   const paletteMode = $("#palette-mode");
@@ -72,6 +107,14 @@
     editor: { open: false, mode: "we", selected: null, brush: "paint", layer: "ground" },
     mouse: { x: 0, y: 0, tileX: 0, tileY: 0, leftDown: false, rightDown: false },
 
+    // ---- character / vessel (snapshot from /api/characters/me at enter) ----
+    // We keep current_hp/mp/stamina locally as floats and clamp on render.
+    // The server doesn't push these yet — combat/regen lands in a later
+    // slice — so they sit pinned at max for now. The rest of the fields
+    // come straight from the API row and are read-only during the session.
+    character: null,
+    cur: { hp: 0, mp: 0, st: 0 },
+
     // ---- realtime / multiplayer ----
     me: null,                   // { id, name, x, y, facing, isAdmin, race }
     others: new Map(),          // id -> { id, name, x, y, facing, anim, isAdmin, race }
@@ -80,6 +123,7 @@
     lastInputSent: { dx: 0, dy: 0, sprint: false, facing: "down", t: 0 },
     inputDirty: false,
     serverTickHz: 20,
+    presence: 1,
   };
 
   // ---- chat ----
@@ -682,6 +726,7 @@
       }
     }
     render();
+    renderMinimap();
     raf = requestAnimationFrame(tick);
   }
   let camAccumX = 0, camAccumY = 0;
@@ -724,15 +769,18 @@
         state.me = msg.you;
         state.others.clear();
         for (const o of msg.others || []) state.others.set(o.id, o);
+        setPresence(state.others.size + 1);
         chat(`Shard "${msg.shard}" — ${state.others.size} other ${state.others.size === 1 ? "soul" : "souls"} present.`, "cmd");
         break;
       case "join":
         if (msg.player && msg.player.id !== state.me?.id) {
           state.others.set(msg.player.id, msg.player);
+          setPresence(state.others.size + 1);
         }
         break;
       case "leave":
         state.others.delete(msg.id);
+        setPresence(state.others.size + (state.me ? 1 : 0));
         break;
       case "state":
         for (const p of msg.players || []) {
@@ -750,6 +798,8 @@
         for (const id of state.others.keys()) {
           if (!present.has(id)) state.others.delete(id);
         }
+        // Snapshot's player count is the truth — keep the HUD in lockstep.
+        setPresence((msg.players || []).length);
         break;
       case "chat":
         if (msg.kind === "system") chat(msg.text, "cmd");
@@ -773,11 +823,116 @@
     state.me = null;
   }
 
+  // ---- HUD: stat panel + hotbar + minimap ----
+  function applyCharacterToHud(ch) {
+    state.character = ch;
+    state.cur.hp = ch.hp ?? ch.max_hp ?? 0;
+    state.cur.mp = ch.mana_cap ?? 0;        // mana sits at cap until casting lands
+    state.cur.st = ch.stamina_cap ?? 0;     // stamina at cap until sprint drain lands
+    statsName.textContent  = ch.name || "—";
+    statsLevel.textContent = ch.level ?? 1;
+    const isAdmin = ch.race === null || ch.race === undefined;
+    statsRace.textContent  = isAdmin ? "Architect" : (ch.race_name || ch.race || "—");
+    statsRace.classList.toggle("is-admin", isAdmin);
+    statsXp.textContent    = ch.xp ?? 0;
+    statsCtrl.textContent  = ch.control ?? 10;
+    statsRes.textContent   = `${ch.resistance ?? 0}%`;
+    const weapon = ch.starting_weapon || (isAdmin ? "Free Hand" : "—");
+    hbWeaponName.textContent = weapon;
+    hbWeaponIcon.textContent = WEAPON_ICON[weapon] || "⚔";
+    refreshBars();
+  }
+  function refreshBars() {
+    const ch = state.character;
+    if (!ch) return;
+    const maxHp = ch.max_hp || 1;
+    const maxMp = ch.mana_cap || 1;
+    const maxSt = ch.stamina_cap || 1;
+    const pct = (n, m) => Math.max(0, Math.min(100, (n / m) * 100));
+    barHpFill.style.width = pct(state.cur.hp, maxHp) + "%";
+    barMpFill.style.width = pct(state.cur.mp, maxMp) + "%";
+    barStFill.style.width = pct(state.cur.st, maxSt) + "%";
+    barHpNum.textContent = `${Math.round(state.cur.hp)}/${maxHp}`;
+    barMpNum.textContent = `${Math.round(state.cur.mp)}/${maxMp}`;
+    barStNum.textContent = `${Math.round(state.cur.st)}/${maxSt}`;
+  }
+  function setBadge(role) {
+    rbServerName.textContent = "0 · Firstlight";
+    rbMode.textContent = role === "admin" ? "Architect Mode" : "Player Mode";
+  }
+  function setPresence(n) {
+    state.presence = n;
+    presenceCt.textContent = n;
+  }
+
+  // Mini-map: 160×160 px, 1 px ≈ 1 tile, range ±80 tiles around self.
+  // Draws painted-tile occupancy (faint), then other souls (race-tinted),
+  // then self at the exact center as a gold pip with a facing tick.
+  const MM_HALF = 80;
+  function renderMinimap() {
+    const w = minimap.width, h = minimap.height;
+    minimapCtx.fillStyle = "#0c0e14";
+    minimapCtx.fillRect(0, 0, w, h);
+    const cx = w / 2, cy = h / 2;
+    const me = state.me;
+    if (!me) return;
+    // Faint paint occupancy (only the active "ground" + "decor" layers).
+    if (state.world) {
+      minimapCtx.fillStyle = "rgba(95, 130, 80, 0.35)";
+      for (const layer of state.world.layers) {
+        for (const k in layer.tiles) {
+          const c = k.indexOf(",");
+          const tx = +k.slice(0, c), ty = +k.slice(c + 1);
+          const dx = tx - me.x, dy = ty - me.y;
+          if (Math.abs(dx) > MM_HALF || Math.abs(dy) > MM_HALF) continue;
+          minimapCtx.fillRect(cx + dx, cy + dy, 1, 1);
+        }
+      }
+    }
+    // Cardinal cross + frame
+    minimapCtx.strokeStyle = "rgba(217,166,74,0.18)";
+    minimapCtx.lineWidth = 1;
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(cx + 0.5, 0); minimapCtx.lineTo(cx + 0.5, h);
+    minimapCtx.moveTo(0, cy + 0.5); minimapCtx.lineTo(w, cy + 0.5);
+    minimapCtx.stroke();
+    // Other souls
+    for (const o of state.others.values()) {
+      const dx = o.x - me.x, dy = o.y - me.y;
+      if (Math.abs(dx) > MM_HALF || Math.abs(dy) > MM_HALF) continue;
+      const px = Math.round(cx + dx), py = Math.round(cy + dy);
+      minimapCtx.fillStyle = o.isAdmin ? "#f6e4a3" : (RACE_COLOR[o.race] || "#cfe4ff");
+      minimapCtx.fillRect(px - 1, py - 1, 3, 3);
+    }
+    // Self pip (slightly larger, gold)
+    minimapCtx.fillStyle = "#f6e4a3";
+    minimapCtx.fillRect(cx - 2, cy - 2, 4, 4);
+    minimapCtx.strokeStyle = "rgba(20,16,8,0.85)";
+    minimapCtx.strokeRect(cx - 2.5, cy - 2.5, 5, 5);
+    // Facing tick
+    const fdir = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[me.facing] || [0, 1];
+    minimapCtx.strokeStyle = "#f6e4a3";
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(cx + 0.5, cy + 0.5);
+    minimapCtx.lineTo(cx + 0.5 + fdir[0] * 6, cy + 0.5 + fdir[1] * 6);
+    minimapCtx.stroke();
+  }
+
   // ---- enter / leave ----
-  async function enter({ role }) {
+  async function enter({ role, character }) {
     state.role = role || "player";
+    setBadge(state.role);
     realmEl.hidden = false;
     resize();
+    // If the host page handed us the character row, use it immediately so
+    // the HUD has values on first paint. Otherwise pull it ourselves.
+    if (character) applyCharacterToHud(character);
+    else {
+      try {
+        const r = await api("/api/characters/me");
+        if (r && r.character) applyCharacterToHud(r.character);
+      } catch (err) { /* HUD will stay at "—" until next attempt */ }
+    }
     if (!state.booted) {
       state.booted = true;
       chat("You step onto the plain grass.", "good");

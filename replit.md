@@ -68,6 +68,8 @@ Sprite-slice and tilemap data live on disk under `data/`, not in Postgres, so ad
 - Admin sprite slicing pipeline (per-frame rects, fps, scale) + animated character-sheet portrait
 - Tileset uploader (TSX + image, /maps.html) and in-game live world painter (`/command we`)
 - **Realtime multiplayer slice** — `/ws/realm` WebSocket, 20 Hz authoritative tick, presence + shard-wide chat, server-authoritative movement (4.5 t/s walk, ×1.8 sprint), camera-follow render, position persisted across logout
+- **In-realm HUD** — Server identity badge (`Server 0 · Firstlight` with Architect/Player Mode subtitle), souls-online counter, top-right mini-map (160×160, ±80 tiles around self, race-tinted dots + faint paint occupancy + facing tick), bottom-left stat panel (vessel name + race badge + level + live HP/MP/Stamina bars + XP/Control/Resistance footer), bottom-center 10-slot hotbar with the racial weapon in slot 1 (Dagger / Club / Bow / Slingshot / Katana / Free Hand for the Architect) and locked spell slots 2–0, and an Output meter floating just above the hotbar (locked at 100% until the casting system lands).
+- **Server-0 admin gate** — Until `/command create_server` + `/command world_publish` ship, only admins may step into the only existing shard. The WS upgrade rejects non-admins with `403 No published server yet`, the character-sheet "Enter the Realm" button is disabled for players, and the player-side note explains they're waiting for a player shard to open.
 
 ## Next up (per design doc)
 - Basic attack on key `1` with weapon damage scaling (§7) — needs hit detection against other players + monsters

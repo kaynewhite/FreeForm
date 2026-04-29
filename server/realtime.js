@@ -144,6 +144,12 @@ function init(server, sessionSecret) {
       if (!sid) return reject(socket, 401);
       const sess = await loadSession(sid);
       if (!sess?.userId) return reject(socket, 401);
+      // Server 0 (the only shard right now) is the Architect's canvas. Until
+      // /command create_server + /command world_publish ship a player-facing
+      // shard, only admins may step in. Players get a polite refusal.
+      if (sess.role !== "admin") {
+        return reject(socket, 403, "No published server yet");
+      }
       const char = await loadLivingCharacter(sess.userId);
       if (!char) return reject(socket, 409, "No living vessel");
 

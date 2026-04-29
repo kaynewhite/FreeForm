@@ -229,10 +229,96 @@
   <section class="realm" id="realm" hidden>
     <canvas class="realm-canvas" id="realm-canvas"></canvas>
 
+    <!-- Top HUD: leave button on the far left, server identity badge, then
+         (right side) the editor flag. The mini-map is its own corner widget
+         underneath this row. -->
     <div class="realm-hud-top">
-      <button class="link-btn" id="leave-realm-btn" type="button">← Leave the realm</button>
-      <span class="realm-coords" id="realm-coords">(0, 0)</span>
+      <button class="link-btn" id="leave-realm-btn" type="button">← Leave</button>
+      <div class="realm-badge">
+        <span class="rb-label">Server</span>
+        <span class="rb-name" id="rb-server-name">0 · Firstlight</span>
+        <span class="rb-mode" id="rb-mode">Architect Mode</span>
+      </div>
+      <div class="realm-presence" title="Souls bound to this shard">
+        <span class="presence-glyph">✦</span>
+        <span class="presence-count" id="presence-count">1</span>
+      </div>
       <span class="realm-edit-flag" id="realm-edit-flag" hidden>Editing · <span id="realm-edit-mode">we</span></span>
+    </div>
+
+    <!-- Mini-map: top-right corner. Renders self at center plus all visible
+         souls within ±80 tiles, race-tinted. -->
+    <aside class="realm-minimap">
+      <canvas id="minimap-canvas" width="160" height="160"></canvas>
+      <div class="minimap-foot">
+        <span class="mm-label">Pulse</span>
+        <span class="mm-coords" id="realm-coords">(0, 0)</span>
+      </div>
+    </aside>
+
+    <!-- Stat panel: bottom-left, sits ABOVE the chat rail. Shows the vessel
+         name + race badge, the three live bars (HP / Mana / Stamina), and a
+         small footer with XP, Control, and Resistance for quick reference. -->
+    <aside class="realm-stats" id="realm-stats">
+      <div class="stats-head">
+        <div class="stats-name-row">
+          <span class="stats-name" id="stats-name">—</span>
+          <span class="stats-race" id="stats-race">—</span>
+        </div>
+        <span class="stats-level">Lv <span id="stats-level-num">1</span></span>
+      </div>
+      <div class="stats-bars">
+        <div class="vbar bar-hp">
+          <span class="vbar-label">HP</span>
+          <div class="vbar-track"><div class="vbar-fill" id="bar-hp-fill"></div></div>
+          <span class="vbar-num" id="bar-hp-num">—</span>
+        </div>
+        <div class="vbar bar-mp">
+          <span class="vbar-label">MP</span>
+          <div class="vbar-track"><div class="vbar-fill" id="bar-mp-fill"></div></div>
+          <span class="vbar-num" id="bar-mp-num">—</span>
+        </div>
+        <div class="vbar bar-st">
+          <span class="vbar-label">ST</span>
+          <div class="vbar-track"><div class="vbar-fill" id="bar-st-fill"></div></div>
+          <span class="vbar-num" id="bar-st-num">—</span>
+        </div>
+      </div>
+      <div class="stats-foot">
+        <span>XP <b id="stats-xp">0</b></span>
+        <span>Ctrl <b id="stats-ctrl">10</b></span>
+        <span>Res <b id="stats-res">0%</b></span>
+      </div>
+    </aside>
+
+    <!-- Output meter: floats just above the hotbar, centered. Per design doc
+         §14 the scroll wheel sets channeled mana output 1..100% — that
+         system isn't built yet, so it sits at 100% and the wheel still
+         zooms the camera for now. -->
+    <div class="realm-output" id="realm-output">
+      <span class="out-label">Output</span>
+      <div class="out-track"><div class="out-fill" id="out-fill"></div></div>
+      <span class="out-num" id="out-num">100%</span>
+    </div>
+
+    <!-- Hotbar: bottom-center. Slot 1 holds the racial weapon (or "Free
+         Hand" for the Architect); slots 2..0 are reserved for spells once
+         the casting system lands and read as locked. -->
+    <div class="realm-hotbar" id="realm-hotbar">
+      <button class="hb-slot is-active" data-slot="1" type="button">
+        <span class="hb-key">1</span>
+        <span class="hb-icon" id="hb-weapon-icon">⚔</span>
+        <span class="hb-name" id="hb-weapon-name">—</span>
+      </button>
+      <button class="hb-slot is-locked" data-slot="2" type="button" disabled><span class="hb-key">2</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="3" type="button" disabled><span class="hb-key">3</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="4" type="button" disabled><span class="hb-key">4</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="5" type="button" disabled><span class="hb-key">5</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="6" type="button" disabled><span class="hb-key">6</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="7" type="button" disabled><span class="hb-key">7</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="8" type="button" disabled><span class="hb-key">8</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="9" type="button" disabled><span class="hb-key">9</span><span class="hb-lock">·</span></button>
+      <button class="hb-slot is-locked" data-slot="0" type="button" disabled><span class="hb-key">0</span><span class="hb-lock">·</span></button>
     </div>
 
     <!-- Chat / command rail -->

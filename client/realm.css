@@ -36,21 +36,13 @@
   align-items: center;
   gap: 1rem;
   padding: 0.7rem 1rem;
+  /* Leave room on the right for the absolutely-positioned mini-map. */
+  padding-right: calc(180px + 1rem);
   background: linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0));
   pointer-events: none;
+  z-index: 4;
 }
 .realm-hud-top > * { pointer-events: auto; }
-.realm-coords {
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.75rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-  background: rgba(0,0,0,0.55);
-  border: 1px solid var(--gold-deep);
-  padding: 0.25rem 0.55rem;
-  border-radius: 2px;
-}
 .realm-edit-flag {
   margin-left: auto;
   font-family: var(--font-display, "Cinzel", serif);
@@ -65,6 +57,305 @@
   box-shadow: 0 0 12px rgba(246,228,163,0.35);
 }
 .realm-edit-flag[hidden] { display: none; }
+
+/* ---- server identity badge (top-left, beside Leave) ---- */
+.realm-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--gold-deep);
+  padding: 0.3rem 0.7rem;
+  border-radius: 2px;
+}
+.realm-badge .rb-label {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.realm-badge .rb-name {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  color: var(--gold-1, #f6e4a3);
+}
+.realm-badge .rb-mode {
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-left: 1px solid var(--gold-deep);
+  padding-left: 0.55rem;
+}
+
+/* ---- presence (souls online) ---- */
+.realm-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  padding: 0.25rem 0.55rem;
+  border-radius: 2px;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+}
+.realm-presence .presence-glyph { color: var(--gold-1, #f6e4a3); }
+.realm-presence .presence-count { color: var(--ink); font-weight: 600; }
+
+/* ---- mini-map (top-right corner) ---- */
+.realm-minimap {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  width: 180px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  padding: 6px;
+  z-index: 4;
+  box-shadow: 0 0 14px rgba(0,0,0,0.5);
+}
+.realm-minimap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #0c0e14;
+  border: 1px solid rgba(217,166,74,0.25);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.realm-minimap .minimap-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 4px;
+  padding: 0 2px;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.realm-minimap .mm-coords { color: var(--ink-soft); font-family: monospace; letter-spacing: 0.06em; }
+
+/* ---- stat panel (bottom-left, above chat) ---- */
+.realm-stats {
+  position: absolute;
+  left: 1rem;
+  /* stacks above the chat rail (chat is bottom: 1rem with up to ~30vh body) */
+  bottom: calc(30vh + 3.4rem);
+  width: min(320px, 50vw);
+  background: linear-gradient(180deg, rgba(16,12,20,0.92), rgba(7,6,10,0.92));
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  padding: 0.55rem 0.7rem;
+  z-index: 3;
+  box-shadow: 0 0 16px rgba(0,0,0,0.55);
+}
+.stats-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--gold-deep);
+  margin-bottom: 0.5rem;
+}
+.stats-name-row { display: inline-flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+.stats-name {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: var(--gold-1, #f6e4a3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stats-race {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border: 1px solid var(--gold-deep);
+  padding: 0.05rem 0.4rem;
+  border-radius: 2px;
+}
+.stats-race.is-admin {
+  color: #1d150a;
+  background: linear-gradient(180deg, #f6e4a3, #caa24a);
+  border-color: #7a5a1f;
+}
+.stats-level {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.stats-level b { color: var(--gold-1, #f6e4a3); font-weight: 600; }
+.stats-bars { display: flex; flex-direction: column; gap: 0.3rem; }
+.vbar {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+.vbar-label {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+}
+.vbar-track {
+  height: 12px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  border-radius: 1px;
+  overflow: hidden;
+  position: relative;
+}
+.vbar-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.25s ease-out;
+  background: linear-gradient(180deg, #fff 0%, #ccc 100%);
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.35);
+}
+.bar-hp .vbar-fill { background: linear-gradient(180deg, #ff8a7a, #b13a2a); }
+.bar-mp .vbar-fill { background: linear-gradient(180deg, #8ec1ff, #2c5fb8); }
+.bar-st .vbar-fill { background: linear-gradient(180deg, #ffe085, #b88a1a); }
+.vbar-num { font-size: 0.72rem; color: var(--ink-soft); white-space: nowrap; }
+.stats-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--gold-deep);
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.stats-foot b { color: var(--ink-soft); font-weight: 600; }
+
+/* ---- output meter (above hotbar) ---- */
+.realm-output {
+  position: absolute;
+  left: 50%;
+  bottom: calc(1rem + 64px + 0.6rem);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  padding: 0.3rem 0.7rem;
+  z-index: 3;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.out-track {
+  width: 160px;
+  height: 8px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.out-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #8ec1ff, #caa6ff);
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.35);
+}
+.out-num { color: var(--ink); font-family: monospace; letter-spacing: 0.06em; }
+
+/* ---- hotbar (bottom-center) ---- */
+.realm-hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  z-index: 3;
+  box-shadow: 0 0 18px rgba(0,0,0,0.55);
+}
+.hb-slot {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20,16,24,0.95);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  color: var(--ink-soft);
+  font-family: var(--font-display, "Cinzel", serif);
+  cursor: default;
+  padding: 0;
+}
+.hb-slot .hb-key {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.6rem;
+  color: var(--ink-mute);
+  letter-spacing: 0.05em;
+}
+.hb-slot .hb-icon {
+  font-size: 1.6rem;
+  color: var(--gold-1, #f6e4a3);
+  line-height: 1;
+}
+.hb-slot .hb-name {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+.hb-slot.is-active {
+  border-color: var(--gold-2, #d8b257);
+  box-shadow: inset 0 0 8px rgba(246,228,163,0.18), 0 0 10px rgba(246,228,163,0.25);
+}
+.hb-slot.is-locked {
+  background: rgba(10,8,14,0.8);
+  color: var(--ink-mute);
+  cursor: not-allowed;
+}
+.hb-slot.is-locked .hb-lock {
+  font-size: 1.4rem;
+  color: rgba(255,255,255,0.12);
+}
 
 /* ---- chat rail ---- */
 .realm-chat {
