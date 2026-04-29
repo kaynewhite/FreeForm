@@ -36,6 +36,13 @@ async function ensureCoreSchema() {
     )
   `);
 
+  // Persist last-known position so a player re-enters the realm where they
+  // logged off. Added in the realtime slice — older rows just get defaults.
+  await query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS pos_x DOUBLE PRECISION NOT NULL DEFAULT 0`);
+  await query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS pos_y DOUBLE PRECISION NOT NULL DEFAULT 0`);
+  await query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS shard  TEXT             NOT NULL DEFAULT 'default'`);
+  await query(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS facing TEXT             NOT NULL DEFAULT 'down'`);
+
   await query(`
     CREATE UNIQUE INDEX IF NOT EXISTS unique_living_char_name
       ON characters (LOWER(name))

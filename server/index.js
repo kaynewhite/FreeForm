@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const path = require("path");
+const http = require("http");
 const crypto = require("crypto");
 const express = require("express");
 const session = require("express-session");
@@ -14,6 +15,7 @@ const { router: mapsRouter } = require("./maps");
 const { router: worldRouter } = require("./world");
 const { ensureCoreSchema } = require("./schema");
 const { seedAdmin } = require("./seed");
+const realtime = require("./realtime");
 
 const HOST = "0.0.0.0";
 const PORT = Number(process.env.PORT) || 5000;
@@ -94,8 +96,11 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(PORT, HOST, () => {
-  console.log(`[server] listening on http://${HOST}:${PORT}`);
+const server = http.createServer(app);
+realtime.init(server, SESSION_SECRET);
+
+server.listen(PORT, HOST, () => {
+  console.log(`[server] listening on http://${HOST}:${PORT} (ws + http)`);
   ensureCoreSchema()
     .then(() => ensureSpriteSchema())
     .then(() => seedAdmin())

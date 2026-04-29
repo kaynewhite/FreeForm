@@ -66,11 +66,20 @@
     world: null,                // { layers, tileSize, defaultGround, ... }
     tileSize: 16,
     zoom: 2,                    // multiplier
-    cameraX: -16, cameraY: -10, // top-left of the canvas, in world tile coords
-    keys: new Set(),            // currently held keys for panning
+    cameraX: -16, cameraY: -10, // top-left of the canvas, in world tile coords (floats)
+    keys: new Set(),            // currently held keys for movement / panning
     tilesets: new Map(),        // name -> { meta, image }
     editor: { open: false, mode: "we", selected: null, brush: "paint", layer: "ground" },
     mouse: { x: 0, y: 0, tileX: 0, tileY: 0, leftDown: false, rightDown: false },
+
+    // ---- realtime / multiplayer ----
+    me: null,                   // { id, name, x, y, facing, isAdmin, race }
+    others: new Map(),          // id -> { id, name, x, y, facing, anim, isAdmin, race }
+    ws: null,
+    wsReady: false,
+    lastInputSent: { dx: 0, dy: 0, sprint: false, facing: "down", t: 0 },
+    inputDirty: false,
+    serverTickHz: 20,
   };
 
   // ---- chat ----
@@ -124,9 +133,15 @@
     if (!raw.trim()) return;
     chatInput.value = "";
     if (tryCommand(raw)) return;
-    // Plain speech — for now just echo it locally. Multi-player chat lands
-    // when the WebSocket loop does.
-    chat(raw, "");
+    // Plain speech — broadcast to everyone in this shard via the socket.
+    // The server will echo it back (including to us) so all clients render
+    // the same line in the same order.
+    if (state.wsReady) {
+      try { state.ws.send(JSON.stringify({ type: "chat", text: raw })); }
+      catch (err) { chat("Voice failed: " + err.message, "err"); }
+    } else {
+      chat(raw, ""); // fallback: at least show locally
+    }
   });
 
   // ---- camera / panning ----
@@ -138,6 +153,7 @@
   }
   document.addEventListener("keydown", (e) => {
     if (realmEl.hidden) return;
+    const key = (e.key || "").toLowerCase();
     if (e.key === "Escape") {
       if (state.editor.open) { closeEditor(); return; }
       if (isTypingInChat()) { chatInput.blur(); return; }
@@ -149,10 +165,11 @@
       return;
     }
     if (isTypingInChat()) return;
-    state.keys.add(e.key.toLowerCase());
+    if (key) state.keys.add(key);
   });
   document.addEventListener("keyup", (e) => {
-    state.keys.delete(e.key.toLowerCase());
+    const key = (e.key || "").toLowerCase();
+    if (key) state.keys.delete(key);
   });
 
   // ---- mouse: paint / erase / hover readout ----
@@ -436,19 +453,29 @@
   function viewportTilesAcross() { return Math.ceil(window.innerWidth  / (state.tileSize * state.zoom)) + 1; }
   function viewportTilesDown()   { return Math.ceil(window.innerHeight / (state.tileSize * state.zoom)) + 1; }
 
+  // World-tile -> screen-pixel using the (possibly fractional) camera.
+  function worldToScreen(wx, wy, tilePx) {
+    return {
+      sx: (wx - state.cameraX) * tilePx,
+      sy: (wy - state.cameraY) * tilePx,
+    };
+  }
+
   function render() {
     const tilePx = state.tileSize * state.zoom;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const cols = viewportTilesAcross();
-    const rows = viewportTilesDown();
+    const cols = viewportTilesAcross() + 1;
+    const rows = viewportTilesDown() + 1;
+    const camTileX = Math.floor(state.cameraX);
+    const camTileY = Math.floor(state.cameraY);
+    const offX = -(state.cameraX - camTileX) * tilePx;
+    const offY = -(state.cameraY - camTileY) * tilePx;
 
-    // Background = procedural grass tiled across the viewport. This is the
-    // "plain grass ground" the world starts as.
+    // Background = procedural grass tiled across the viewport (fractional
+    // camera offset so scroll is smooth, not jittery per-tile).
     if (!grassPattern) grassPattern = makeGrassPattern();
-    for (let dy = 0; dy < rows; dy++) {
-      for (let dx = 0; dx < cols; dx++) {
-        ctx.drawImage(grassPattern, dx * tilePx, dy * tilePx, tilePx, tilePx);
+    for (let dy = -1; dy < rows; dy++) {
+      for (let dx = -1; dx < cols; dx++) {
+        ctx.drawImage(grassPattern, dx * tilePx + offX, dy * tilePx + offY, tilePx, tilePx);
       }
     }
 
@@ -458,17 +485,21 @@
     for (const layer of state.world.layers) {
       const isActive = state.editor.open && layer.name === state.editor.layer;
       ctx.globalAlpha = !state.editor.open || isActive ? 1 : 0.55;
-      for (let dy = 0; dy < rows; dy++) {
-        for (let dx = 0; dx < cols; dx++) {
-          const wx = state.cameraX + dx;
-          const wy = state.cameraY + dy;
+      for (let dy = -1; dy < rows; dy++) {
+        for (let dx = -1; dx < cols; dx++) {
+          const wx = camTileX + dx;
+          const wy = camTileY + dy;
           const ref = layer.tiles[`${wx},${wy}`];
           if (!ref) continue;
-          drawTileRef(ref, dx * tilePx, dy * tilePx, tilePx);
+          drawTileRef(ref, dx * tilePx + offX, dy * tilePx + offY, tilePx);
         }
       }
     }
     ctx.globalAlpha = 1;
+
+    // Other players first, then self on top.
+    for (const p of state.others.values()) drawPlayer(p, tilePx, false);
+    if (state.me) drawPlayer(state.me, tilePx, true);
 
     // Editor overlays: light grid + cursor highlight.
     if (state.editor.open) {
@@ -478,6 +509,58 @@
 
     // Origin cross — easy reference point for admins navigating with WASD.
     drawOriginCross(tilePx);
+  }
+
+  // Each player is a glowing circle for now (sprites land when player race
+  // sheets are uploaded). Admins get a gold ring; others get a race-tinted
+  // body. Name plate floats above the head.
+  const RACE_COLOR = {
+    human: "#f4d499", orc: "#7fe39a", elf: "#b9e6e6",
+    crystalline: "#cfe4ff", voidborn: "#caa6ff",
+  };
+  function drawPlayer(p, tilePx, isSelf) {
+    const { sx, sy } = worldToScreen(p.x, p.y, tilePx);
+    const cx = sx + tilePx / 2;
+    const cy = sy + tilePx / 2;
+    const r  = tilePx * 0.42;
+    const fill = p.isAdmin ? "#f6e4a3" : (RACE_COLOR[p.race] || "#cfe4ff");
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.7, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // body
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // ring (admin = thicker gold, self = thin gold, others = dim)
+    ctx.lineWidth = isSelf ? 2.5 : 1.5;
+    ctx.strokeStyle = p.isAdmin ? "#f6e4a3" : (isSelf ? "rgba(246,228,163,0.9)" : "rgba(0,0,0,0.55)");
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + (isSelf ? 1 : 0), 0, Math.PI * 2);
+    ctx.stroke();
+    // facing tick
+    const dirs = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    const [fx, fy] = dirs[p.facing] || [0, 1];
+    ctx.strokeStyle = "rgba(20,16,8,0.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + fx * r * 0.85, cy + fy * r * 0.85);
+    ctx.stroke();
+    // name plate
+    const label = p.name + (p.isAdmin ? " ✦" : "");
+    ctx.font = "600 12px 'Cinzel', 'Cormorant Garamond', serif";
+    const w = ctx.measureText(label).width + 10;
+    const ny = cy - r - 14;
+    ctx.fillStyle = "rgba(10,10,18,0.78)";
+    ctx.fillRect(cx - w / 2, ny, w, 16);
+    ctx.fillStyle = isSelf ? "#f6e4a3" : "#e3dcc7";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, cx, ny + 8);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   }
 
   function drawTileRef(ref, dx, dy, tilePx) {
@@ -528,33 +611,167 @@
     ctx.stroke();
   }
 
-  // ---- camera tick ----
-  let lastTickTime = 0;
-  function tick(now) {
-    const dt = lastTickTime ? (now - lastTickTime) / 1000 : 0;
-    lastTickTime = now;
-    // 8 tiles per second of camera movement, scaled to whatever the user
-    // is doing. Holding shift speeds it up.
-    const speed = state.keys.has("shift") ? 24 : 8;
+  // ---- input + camera tick ----
+  // While the editor is OPEN, WASD/arrows pan the camera (admin worldbuild
+  // mode). While the editor is CLOSED, WASD/arrows are sent to the server
+  // as movement input and the camera follows the player.
+  function readInput() {
     let dx = 0, dy = 0;
     if (state.keys.has("w") || state.keys.has("arrowup"))    dy -= 1;
     if (state.keys.has("s") || state.keys.has("arrowdown"))  dy += 1;
     if (state.keys.has("a") || state.keys.has("arrowleft"))  dx -= 1;
     if (state.keys.has("d") || state.keys.has("arrowright")) dx += 1;
+    const sprint = state.keys.has("shift");
+    let facing = state.lastInputSent.facing;
     if (dx || dy) {
-      // Move by sub-tile fractions over time, then snap when accumulated.
-      camAccumX += dx * speed * dt;
-      camAccumY += dy * speed * dt;
-      const snapX = Math.trunc(camAccumX);
-      const snapY = Math.trunc(camAccumY);
-      if (snapX) { state.cameraX += snapX; camAccumX -= snapX; }
-      if (snapY) { state.cameraY += snapY; camAccumY -= snapY; }
+      if (Math.abs(dx) > Math.abs(dy)) facing = dx < 0 ? "left" : "right";
+      else                              facing = dy < 0 ? "up"   : "down";
+    }
+    return { dx, dy, sprint, facing };
+  }
+  // Coalesce input sends to ~20 Hz. Server applies them on its tick anyway.
+  function maybeSendInput() {
+    if (!state.wsReady) return;
+    const inp = readInput();
+    const last = state.lastInputSent;
+    const now = performance.now();
+    const changed = inp.dx !== last.dx || inp.dy !== last.dy
+                 || inp.sprint !== last.sprint || inp.facing !== last.facing;
+    // Always re-send periodically too — keeps the server happy with current intent.
+    if (!changed && now - last.t < 100) return;
+    last.dx = inp.dx; last.dy = inp.dy; last.sprint = inp.sprint;
+    last.facing = inp.facing; last.t = now;
+    try { state.ws.send(JSON.stringify({ type: "input", ...inp })); } catch {}
+  }
+
+  let lastTickTime = 0;
+  function tick(now) {
+    const dt = lastTickTime ? (now - lastTickTime) / 1000 : 0;
+    lastTickTime = now;
+
+    if (state.editor.open) {
+      // Admin worldbuild: free-pan the camera (legacy behavior).
+      const speed = state.keys.has("shift") ? 24 : 8;
+      let dx = 0, dy = 0;
+      if (state.keys.has("w") || state.keys.has("arrowup"))    dy -= 1;
+      if (state.keys.has("s") || state.keys.has("arrowdown"))  dy += 1;
+      if (state.keys.has("a") || state.keys.has("arrowleft"))  dx -= 1;
+      if (state.keys.has("d") || state.keys.has("arrowright")) dx += 1;
+      if (dx || dy) {
+        camAccumX += dx * speed * dt;
+        camAccumY += dy * speed * dt;
+        const snapX = Math.trunc(camAccumX);
+        const snapY = Math.trunc(camAccumY);
+        if (snapX) { state.cameraX += snapX; camAccumX -= snapX; }
+        if (snapY) { state.cameraY += snapY; camAccumY -= snapY; }
+      }
+      // While editing, pause input transmission so the player avatar stays put.
+      if (state.wsReady && (state.lastInputSent.dx || state.lastInputSent.dy)) {
+        state.lastInputSent.dx = 0; state.lastInputSent.dy = 0;
+        try { state.ws.send(JSON.stringify({ type: "input", dx: 0, dy: 0, sprint: false, facing: state.lastInputSent.facing })); } catch {}
+      }
+    } else {
+      // Player mode: send input, camera follows our authoritative position.
+      maybeSendInput();
+      if (state.me) {
+        const tilePx = state.tileSize * state.zoom;
+        const cols = window.innerWidth  / tilePx;
+        const rows = window.innerHeight / tilePx;
+        state.cameraX = state.me.x - cols / 2 + 0.5;
+        state.cameraY = state.me.y - rows / 2 + 0.5;
+      }
     }
     render();
     raf = requestAnimationFrame(tick);
   }
   let camAccumX = 0, camAccumY = 0;
   let raf = 0;
+
+  // ---- websocket: realtime presence + chat ----
+  function connectSocket() {
+    if (state.ws) return;
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${location.host}/ws/realm`;
+    const ws = new WebSocket(url);
+    state.ws = ws;
+    ws.addEventListener("open", () => {
+      state.wsReady = true;
+      chat("Bound to the world's pulse.", "good");
+    });
+    ws.addEventListener("message", (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      handleServerMessage(msg);
+    });
+    ws.addEventListener("close", (ev) => {
+      state.wsReady = false;
+      state.ws = null;
+      state.others.clear();
+      if (ev.code === 4000) chat("Another session took your place.", "err");
+      else if (!realmEl.hidden) {
+        chat("Lost the world's pulse — reconnecting…", "err");
+        setTimeout(() => { if (!realmEl.hidden) connectSocket(); }, 1500);
+      }
+    });
+    ws.addEventListener("error", () => {
+      // close handler will run; nothing to do here
+    });
+  }
+  function handleServerMessage(msg) {
+    switch (msg.type) {
+      case "welcome":
+        state.serverTickHz = msg.tickHz || 20;
+        state.me = msg.you;
+        state.others.clear();
+        for (const o of msg.others || []) state.others.set(o.id, o);
+        chat(`Shard "${msg.shard}" — ${state.others.size} other ${state.others.size === 1 ? "soul" : "souls"} present.`, "cmd");
+        break;
+      case "join":
+        if (msg.player && msg.player.id !== state.me?.id) {
+          state.others.set(msg.player.id, msg.player);
+        }
+        break;
+      case "leave":
+        state.others.delete(msg.id);
+        break;
+      case "state":
+        for (const p of msg.players || []) {
+          if (state.me && p.id === state.me.id) {
+            state.me.x = p.x; state.me.y = p.y;
+            state.me.facing = p.facing; state.me.anim = p.anim;
+          } else {
+            const cur = state.others.get(p.id);
+            if (cur) { Object.assign(cur, p); }
+            else state.others.set(p.id, p);
+          }
+        }
+        // Drop any stragglers not in this snapshot
+        const present = new Set((msg.players || []).map((p) => p.id));
+        for (const id of state.others.keys()) {
+          if (!present.has(id)) state.others.delete(id);
+        }
+        break;
+      case "chat":
+        if (msg.kind === "system") chat(msg.text, "cmd");
+        else if (msg.from) {
+          const tag = msg.from.isAdmin ? "✦ " : "";
+          chat(`${tag}${msg.from.name}: ${msg.text}`,
+               msg.from.id === state.me?.id ? "self" : "");
+        }
+        break;
+      case "goodbye":
+        chat("Server: " + (msg.reason || "disconnected"), "err");
+        break;
+    }
+  }
+  function disconnectSocket() {
+    if (!state.ws) return;
+    try { state.ws.close(1000, "leave"); } catch {}
+    state.ws = null;
+    state.wsReady = false;
+    state.others.clear();
+    state.me = null;
+  }
 
   // ---- enter / leave ----
   async function enter({ role }) {
@@ -570,6 +787,7 @@
       try { await loadWorld(); }
       catch (err) { chat("Failed to load world: " + err.message, "err"); }
     }
+    connectSocket();
     if (!raf) raf = requestAnimationFrame(tick);
   }
   function leave() {
@@ -577,9 +795,16 @@
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     state.keys.clear();
     closeEditor();
+    disconnectSocket();
     window.dispatchEvent(new CustomEvent("freeform:leave-realm"));
   }
   leaveBtn.addEventListener("click", leave);
+
+  // Best-effort goodbye when the tab closes — saves us a "ghost" player
+  // hanging around until the server's tick notices the dead socket.
+  window.addEventListener("beforeunload", () => {
+    if (state.ws) try { state.ws.close(1000, "unload"); } catch {}
+  });
 
   window.FreeformRealm = { enter, leave };
 })();

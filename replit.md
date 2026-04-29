@@ -7,6 +7,7 @@ working implementation. Currently only the auth slice is built.
 - Node.js 20 + Express
 - PostgreSQL (Replit-managed) accessed via `pg`
 - `bcrypt` for password hashing, `express-session` + `connect-pg-simple` for sessions
+- `ws` for the realtime layer (20 Hz authoritative tick on `/ws/realm`)
 - Vanilla HTML/CSS/JS client (PixiJS will be added when world rendering starts)
 
 ## UI strategy
@@ -23,7 +24,8 @@ sprites, spell-effect sheets, and small per-item icons (32×32 PNGs made one at
 a time, not bought as a pack).
 
 ## Layout
-- `server/index.js` — Express app, session middleware, static client, port 5000
+- `server/index.js` — Express app, session middleware, static client, port 5000. Wraps the app in `http.createServer` so `server/realtime.js` can attach a WebSocket upgrade handler on the same port.
+- `server/realtime.js` — Realtime / multiplayer layer. WebSocket server at `/ws/realm` that authenticates the upgrade by reading the express-session cookie (`fm.sid`), unsigning it with the same `SESSION_SECRET`, and looking the session up in the `session` table. On connect, loads the caller's living character (404s if dead/none) and adds them to a per-shard `Player` record (`{x, y, facing, anim, input}`). Runs a 20 Hz authoritative tick: each player's last-received `input` packet (`{dx,dy,sprint,facing}`) is integrated into x/y at 4.5 tiles/s walk (×1.8 sprint) with diagonals normalized, then the full shard snapshot is broadcast as `{type:"state", t, players:[…]}`. Client→server messages: `input`, `chat`, `ping`. Server→client: `welcome` (you + others on join), `join`, `leave`, `state`, `chat` (system + say), `pong`, `goodbye` (sent on multi-tab takeover with close code 4000). Position survives logout via `pos_x`, `pos_y`, `shard`, `facing` columns on `characters` — loaded on connect, lazy-saved every 15 s and on disconnect.
 - `server/db.js` — Postgres connection pool
 - `server/schema.js` — Idempotent bootstrap of `users`, `characters`, `session` tables. Runs on every boot.
 - `server/store.js` — Tiny file-backed JSON store. Atomic writes (temp file + rename) into `data/`. Used by sprite slices today; reusable for any small persisted blob.
@@ -38,7 +40,7 @@ a time, not bought as a pack).
 - `client/maps.html` / `maps.js` / `maps.css` — Admin-only **Tileset Library** at `/maps.html`. Upload form (name + multi-file picker), stored-tilesets list with per-file types and delete buttons. Built-in TSX viewer parses the tileset, loads its image, and renders the tile grid with togglable grid lines and tile-id labels. Hover any tile to see its local id (and source rect); click a tile to copy its id to the clipboard for pasting into `/command we` workflows.
 - `server/world.js` — Admin-only **world-state API** at `/api/world`. Per-shard sparse tile storage on disk at `data/world/<shard>.json`. Endpoints: `GET /:shard` (read full shard), `POST /:shard/paint` (batch paint/erase, max 1024 tiles per call), `POST /:shard/clear-layer`, `GET /_/tilesets` (parsed TSX summaries + image URLs the in-game palette consumes). Tile references are `"<tilesetName>:<localTileId>"` strings; every paint validates the tileset exists in `data/maps/` and the id is in range against a small in-memory TSX cache invalidated by mtime. Coords capped at ±2²⁰. Default layers `ground` + `decor` are auto-created. **Every shard starts as plain grass ground** — `defaultGround: "grass:0"` is written into the JSON on creation, and the in-game renderer fills any unset tile with this reference so a fresh world is walkable from the first frame. `ensureDefaultShard()` runs on boot so `data/world/default.json` always exists. Shard JSON shape: `{ shard, tileSize, defaultGround, createdAt, updatedAt, layers: [{ name, tiles: { "x,y": "tileset:id" } }] }`.
 - **World painting is in-game, live.** There is intentionally no `/world.html` admin page — world editing happens inside the running game via `/command we`, `/command world_edit`, and `/command server_edit` (typed into the in-realm chat rail). Each click is a live write straight to `/api/world/default/paint`; there are no draft saves. The in-game palette is screen-contained — the realm view itself is `position: fixed`, the page never scrolls, and the only scrollable region is the palette body.
-- `client/realm.html` is hosted inside `index.html` (section `#realm`). `client/realm.js` / `client/realm.css` own the in-realm view: a full-viewport top-down canvas that paints procedural grass everywhere by default (the "plain grass ground" all shards start as), then layers any painted tiles from `data/world/default.json` on top. WASD/arrow keys pan the camera (shift = sprint), mouse wheel zooms 1×–6×. The chat rail at the bottom-left accepts plain speech and slash commands; `/help` lists them, `/leave` exits back to the character sheet, `/command we` (and `/we`, plus the `world_edit` / `server_edit` aliases) toggles the admin palette overlay. Players see the world but get a polite refusal if they try a `/command we`. The palette overlay reuses `GET /api/world/_/tilesets` to enumerate uploaded TSX tilesets, lets the admin pick a tile, click world to paint, right-click to erase, drag to brush a stroke, and pick the active layer + brush mode (paint/erase) without leaving the realm.
+- `client/realm.html` is hosted inside `index.html` (section `#realm`). `client/realm.js` / `client/realm.css` own the in-realm view: a full-viewport top-down canvas that paints procedural grass everywhere by default (the "plain grass ground" all shards start as), then layers any painted tiles from `data/world/default.json` on top, then renders every player on the shard (self + others) as race-tinted circles with name plates and a facing tick (admins draw with a gold ring, self with a thin gold ring). On `enter()` the realm opens a `WebSocket` to `/ws/realm` (no token — the session cookie travels with the upgrade) and ingests `welcome` / `join` / `leave` / `state` / `chat` messages. WASD/arrow keys send `input` packets to the server (~20 Hz coalesced) and the camera follows the **server-authoritative** position (smooth fractional-tile scroll); shift = sprint. Mouse wheel zooms 1×–6×. The chat rail broadcasts plain speech through the socket — every connected client in the shard sees the same line, in order. Slash commands stay client-side: `/help` lists them, `/leave` exits back to the character sheet (and tears down the socket), `/command we` (and `/we`, plus the `world_edit` / `server_edit` aliases) toggles the admin palette overlay. While the editor is open, WASD reverts to free-pan and the player avatar is parked (input zeroed out) so the admin can build without the body wandering off — players see the world but get a polite refusal if they try a `/command we`. The palette overlay reuses `GET /api/world/_/tilesets` to enumerate uploaded TSX tilesets, lets the admin pick a tile, click world to paint, right-click to erase, drag to brush a stroke, and pick the active layer + brush mode (paint/erase) without leaving the realm. Multi-tab safety: a second connection for the same character bumps the first one with close code 4000 and a "replaced" reason.
 - `server/world.js` write endpoints (`POST /:shard/paint`, `POST /:shard/clear-layer`) are admin-gated with an internal `requireAdmin` middleware, while `GET /:shard` and `GET /_/tilesets` only require an authenticated session — that way every player's client can render the live world while only admins can change it.
 - `client/app.js` / `index.html` / `styles.css` — login, forge, and the character sheet. The character sheet now includes an **animated portrait canvas** (`#portrait-canvas`) above the name. On `showCharacter()` it picks the right idle-down sheet for the vessel (admin → `admin-idleDown-spritesheet.png`; players have no art yet → placeholder), fetches `/api/sprites/slices`, applies the saved frames/frameRects/perFrame/fps/scale, and runs a `requestAnimationFrame` loop centering each frame in the canvas (so per-frame rects of varying size don't jitter). Slices are cached for the session and the loop is torn down on logout. Falls back to a single-strip inference if no slice exists for the URL.
 - `client/assets/sprites/admin/` — admin sprite sheets, organized by animation (idle/walk/attack/cast/death) and weapon variant (no-weapon + 13 weapon overlays). Death sheets are always a single non-directional row.
@@ -58,12 +60,19 @@ Sprite-slice and tilemap data live on disk under `data/`, not in Postgres, so ad
 - `SESSION_SECRET` is required in production; auto-generated in dev
 
 ## What's done
-- Email/username + password registration with validation and bcrypt hashing
-- Login (accepts email or username), logout, "who am I" endpoint
+- Email + password registration with validation and bcrypt hashing
+- Login, logout, "who am I" endpoint
 - Session cookies persisted in Postgres
+- Character forge: random race (5 races), gender, fixed 500 mana cap; admin path skips race/gender per §3.8
+- Permadeath flow: `POST /api/characters/me/die` marks the row dead and frees the name
+- Admin sprite slicing pipeline (per-frame rects, fps, scale) + animated character-sheet portrait
+- Tileset uploader (TSX + image, /maps.html) and in-game live world painter (`/command we`)
+- **Realtime multiplayer slice** — `/ws/realm` WebSocket, 20 Hz authoritative tick, presence + shard-wide chat, server-authoritative movement (4.5 t/s walk, ×1.8 sprint), camera-follow render, position persisted across logout
 
 ## Next up (per design doc)
-- Character creation (random race roll, gender, fixed 500 mana cap)
-- Persist characters; permadeath flow (delete row on HP=0)
-- WebSocket tick loop (20 Hz authoritative server) + PixiJS top-down client
-- Wire the Map Workshop's parsed TMX into the world renderer so admins can build worlds from uploaded tilesets
+- Basic attack on key `1` with weapon damage scaling (§7) — needs hit detection against other players + monsters
+- Stamina cap + sprint drain (§5) so sprinting actually costs something
+- Mana / Mana regen / Output scroll-wheel + Mana Bolt as the first castable spell (§14)
+- HP regen (out-of-combat only) and the on-zero death broadcast that wires the existing `die` flow into combat
+- Wire the Map Workshop's parsed TMX into a tile-aware collision pass so painted walls actually block movement
+- Replace the placeholder circle-avatars with the per-race idle/walk sprite sheets once they exist (uses the same slice pipeline as the portrait)
