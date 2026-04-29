@@ -160,6 +160,34 @@
   const paletteSel  = $("#palette-selected-readout");
   const paletteClose= $("#palette-close-btn");
   const paletteClear= $("#palette-clear-btn");
+  const paletteFillMode = $("#palette-fill-mode");
+  const paletteFillBtn  = $("#palette-fill-btn");
+  // Loading veil — shown while loadWorld() is in flight so the player
+  // never sees a half-rendered map.
+  const loadingVeil = $("#realm-loading");
+  const loadingTitle = $("#rl-title");
+  const loadingBar   = $("#rl-bar-fill");
+  function showLoadingVeil(msg) {
+    if (!loadingVeil) return;
+    if (msg && loadingTitle) loadingTitle.textContent = msg;
+    if (loadingBar) {
+      loadingBar.style.transition = "none";
+      loadingBar.style.width = "8%";
+      // Force a reflow so the next transition kicks in.
+      void loadingBar.offsetWidth;
+      loadingBar.style.transition = "width 1.2s ease-out";
+      loadingBar.style.width = "82%";
+    }
+    loadingVeil.hidden = false;
+  }
+  function hideLoadingVeil() {
+    if (!loadingVeil) return;
+    if (loadingBar) {
+      loadingBar.style.transition = "width 220ms ease-out";
+      loadingBar.style.width = "100%";
+    }
+    setTimeout(() => { loadingVeil.hidden = true; }, 220);
+  }
 
   // ---- API helper ----
   async function api(path, opts = {}) {
@@ -565,6 +593,84 @@
 
   paletteLayer.addEventListener("change", () => { state.editor.layer = paletteLayer.value; });
   paletteBrush.addEventListener("change", () => { state.editor.brush = paletteBrush.value; });
+  // ---- fill modes (per design doc §27, fill / fill_rect / replace) ----
+  // Operates on whatever's currently visible on screen — bounded by the
+  // camera viewport, NOT the whole infinite map. Four modes:
+  //   empty  — paint only viewport tiles that have no tile yet on this layer
+  //   edges  — paint only the border ring of the viewport
+  //   same   — find the tile under the cursor (or the viewport center if the
+  //            cursor isn't over a tile) and replace every matching tile
+  //            within the viewport with the selected one
+  //   all    — paint every visible tile (overwrites)
+  async function applyFillMode(mode) {
+    if (!state.world) { chat("World not loaded yet.", "err"); return; }
+    const layerName = state.editor.layer;
+    const layer = state.world.layers.find((l) => l.name === layerName);
+    if (!layer) { chat(`No layer "${layerName}".`, "err"); return; }
+    if (!state.editor.selected) { chat("Pick a tile from the palette first.", "err"); return; }
+    const tile = `${state.editor.selected.tileset}:${state.editor.selected.tileId}`;
+    const x0 = Math.floor(state.cameraX);
+    const y0 = Math.floor(state.cameraY);
+    const w  = viewportTilesAcross();
+    const h  = viewportTilesDown();
+    const x1 = x0 + w - 1;
+    const y1 = y0 + h - 1;
+    // For 'same' we need a reference tile — prefer the cursor's tile if
+    // it's in-frame, else the center of the viewport.
+    let matchTile = null;
+    if (mode === "same") {
+      const cx = (state.mouse && state.mouse.tileX != null && state.mouse.tileX >= x0 && state.mouse.tileX <= x1)
+        ? state.mouse.tileX : Math.floor((x0 + x1) / 2);
+      const cy = (state.mouse && state.mouse.tileY != null && state.mouse.tileY >= y0 && state.mouse.tileY <= y1)
+        ? state.mouse.tileY : Math.floor((y0 + y1) / 2);
+      matchTile = layer.tiles[`${cx},${cy}`] || null;
+    }
+    const writes = [];
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const isEdge = (x === x0 || x === x1 || y === y0 || y === y1);
+        const key = `${x},${y}`;
+        const cur = layer.tiles[key];
+        let take = false;
+        if (mode === "empty")     take = !cur;
+        else if (mode === "edges") take = isEdge;
+        else if (mode === "same")  take = (cur || null) === matchTile;
+        else                       take = true; // 'all'
+        if (!take) continue;
+        if (cur === tile) continue; // no-op
+        writes.push({ x, y, tile });
+      }
+    }
+    if (!writes.length) { chat(`Fill (${mode}): nothing to paint.`, "cmd"); return; }
+    // Optimistically apply locally.
+    const prev = new Map();
+    for (const w of writes) {
+      const k = `${w.x},${w.y}`;
+      prev.set(k, layer.tiles[k]);
+      layer.tiles[k] = w.tile;
+    }
+    try {
+      // Chunk to keep request bodies sane on huge viewports.
+      const CHUNK = 400;
+      for (let i = 0; i < writes.length; i += CHUNK) {
+        const slice = writes.slice(i, i + CHUNK);
+        await api(`/api/world/${SHARD}/paint`, {
+          method: "POST",
+          body: JSON.stringify({ layer: layerName, tiles: slice }),
+        });
+      }
+      chat(`Fill (${mode}): painted ${writes.length} tile${writes.length === 1 ? "" : "s"} on "${layerName}".`, "good");
+    } catch (err) {
+      // Roll back on failure.
+      for (const [k, v] of prev) {
+        if (v === undefined) delete layer.tiles[k];
+        else layer.tiles[k] = v;
+      }
+      chat("Fill failed: " + err.message, "err");
+    }
+  }
+  paletteFillBtn.addEventListener("click", () => applyFillMode(paletteFillMode.value));
+
   paletteClear.addEventListener("click", async () => {
     const layer = state.editor.layer;
     if (!confirm(`Clear every tile on layer "${layer}"? This cannot be undone.`)) return;
@@ -729,29 +835,58 @@
   }
   window.addEventListener("resize", resize);
 
-  // Procedural grass renderer used wherever no real ground tile is painted
-  // (or when the configured defaultGround tileset isn't uploaded). Cached
-  // off-screen so it draws fast.
-  let grassPattern = null;
-  function makeGrassPattern() {
+  // The default backdrop used wherever no real ground tile is painted is
+  // the deep void of space — black with a sparse field of stars. Drawn into
+  // a single large off-screen canvas (256×256) and tiled across the
+  // viewport. Two parallax layers of stars give a faint sense of depth
+  // without costing per-frame work.
+  let starfieldPattern = null;
+  function makeStarfieldPattern() {
+    const SIZE = 256;
     const g = document.createElement("canvas");
-    g.width = 16; g.height = 16;
+    g.width = SIZE; g.height = SIZE;
     const c = g.getContext("2d");
-    c.fillStyle = "#2c5b2a";
-    c.fillRect(0, 0, 16, 16);
-    // a few darker / lighter blades for texture
-    const blades = [
-      ["#1f3f1c", 30],
-      ["#3b7a36", 22],
-      ["#5da159", 12],
-    ];
-    for (const [color, count] of blades) {
-      c.fillStyle = color;
-      for (let i = 0; i < count; i++) {
-        const x = Math.floor(Math.random() * 16);
-        const y = Math.floor(Math.random() * 16);
-        c.fillRect(x, y, 1, 1);
-      }
+    // Base void — slight blue-violet tint so it doesn't read as pure dead
+    // black against the gold UI.
+    const grad = c.createRadialGradient(SIZE/2, SIZE/2, 0, SIZE/2, SIZE/2, SIZE * 0.75);
+    grad.addColorStop(0, "#0c0a18");
+    grad.addColorStop(1, "#040308");
+    c.fillStyle = grad;
+    c.fillRect(0, 0, SIZE, SIZE);
+    // Distant dust stars (1 px, dim).
+    c.fillStyle = "rgba(180, 200, 255, 0.18)";
+    for (let i = 0; i < 80; i++) {
+      const x = Math.floor(Math.random() * SIZE);
+      const y = Math.floor(Math.random() * SIZE);
+      c.fillRect(x, y, 1, 1);
+    }
+    // Mid-field stars (1 px, brighter).
+    c.fillStyle = "rgba(220, 230, 255, 0.55)";
+    for (let i = 0; i < 30; i++) {
+      const x = Math.floor(Math.random() * SIZE);
+      const y = Math.floor(Math.random() * SIZE);
+      c.fillRect(x, y, 1, 1);
+    }
+    // Foreground "near" stars with a soft cross-glow (sparingly).
+    for (let i = 0; i < 8; i++) {
+      const x = Math.floor(Math.random() * SIZE);
+      const y = Math.floor(Math.random() * SIZE);
+      const r = 1 + Math.floor(Math.random() * 2);
+      const halo = c.createRadialGradient(x, y, 0, x, y, 4);
+      halo.addColorStop(0, "rgba(255, 246, 220, 0.85)");
+      halo.addColorStop(1, "rgba(255, 246, 220, 0)");
+      c.fillStyle = halo;
+      c.fillRect(x - 4, y - 4, 8, 8);
+      c.fillStyle = "rgba(255, 250, 230, 0.95)";
+      c.fillRect(x, y, r, r);
+    }
+    // Whisper of distant nebula — two faint blobs.
+    for (const [cx, cy, hue] of [[60, 90, "rgba(80, 60, 160,"], [190, 170, "rgba(40, 90, 160,"]]) {
+      const neb = c.createRadialGradient(cx, cy, 0, cx, cy, 70);
+      neb.addColorStop(0, hue + "0.10)");
+      neb.addColorStop(1, hue + "0)");
+      c.fillStyle = neb;
+      c.fillRect(cx - 70, cy - 70, 140, 140);
     }
     return g;
   }
@@ -776,12 +911,20 @@
     const offX = -(state.cameraX - camTileX) * tilePx;
     const offY = -(state.cameraY - camTileY) * tilePx;
 
-    // Background = procedural grass tiled across the viewport (fractional
-    // camera offset so scroll is smooth, not jittery per-tile).
-    if (!grassPattern) grassPattern = makeGrassPattern();
-    for (let dy = -1; dy < rows; dy++) {
-      for (let dx = -1; dx < cols; dx++) {
-        ctx.drawImage(grassPattern, dx * tilePx + offX, dy * tilePx + offY, tilePx, tilePx);
+    // Background = the deep void of space, tiled. The starfield pattern is
+    // 256×256 (one tile of the pattern covers many world-tiles) so we
+    // compute its tile size separately from world tilePx.
+    if (!starfieldPattern) starfieldPattern = makeStarfieldPattern();
+    const STAR_PX = starfieldPattern.width;
+    // Slow parallax: stars drift at 30% of the camera so the world feels
+    // big, not glued to the player.
+    const sOffX = -((state.cameraX * tilePx * 0.3) % STAR_PX);
+    const sOffY = -((state.cameraY * tilePx * 0.3) % STAR_PX);
+    const sCols = Math.ceil(window.innerWidth  / STAR_PX) + 2;
+    const sRows = Math.ceil(window.innerHeight / STAR_PX) + 2;
+    for (let dy = -1; dy < sRows; dy++) {
+      for (let dx = -1; dx < sCols; dx++) {
+        ctx.drawImage(starfieldPattern, dx * STAR_PX + sOffX, dy * STAR_PX + sOffY);
       }
     }
 
@@ -1963,14 +2106,20 @@
     }
     if (!state.booted) {
       state.booted = true;
-      chat("You step onto the plain grass.", "good");
+      chat("You drift into the void between stars.", "good");
       chat("Press T to speak. Click the chat header to fold it away.", "cmd");
       if (state.role === "admin") {
         chat("Architect: type /command we, /command world_edit, or /command server_edit to weave the world.", "cmd");
       }
-      try { await loadWorld(); }
-      catch (err) { chat("Failed to load world: " + err.message, "err"); }
     }
+    // Always refetch the world on enter — the JSON on disk may have been
+    // edited by another tab (or this same admin in a previous session)
+    // since we last loaded. The loading veil hides the canvas so the player
+    // never sees a half-rendered world.
+    showLoadingVeil("Weaving the realm…");
+    try { await loadWorld(); }
+    catch (err) { chat("Failed to load world: " + err.message, "err"); }
+    hideLoadingVeil();
     await spritesPromise.catch(() => {});
     connectSocket();
     if (!raf) raf = requestAnimationFrame(tick);

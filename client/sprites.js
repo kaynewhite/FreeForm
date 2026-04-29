@@ -5,6 +5,8 @@
   const state = {
     manifest: null,
     savedSlices: {}, // url → saved slice payload
+    characters: [],  // [{ id, label, base, hasSheets }, ...]
+    character: "admin",
     weapon: "no-weapon",
     animation: "idle",
     frames: 4,
@@ -33,6 +35,8 @@
   const ALL_DIRECTIONS = ["down", "left", "right", "up"];
 
   // ----- DOM -----
+  const characterSel = $("#character-select");
+  const applyOtherCharBtn = $("#apply-other-char-btn");
   const weaponSel = $("#weapon-select");
   const animSel = $("#anim-select");
   const framesInput = $("#frames-input");
@@ -138,10 +142,37 @@
     return p;
   }
 
+  // ----- character list (populated once on page load) -----
+  async function loadCharacterList() {
+    try {
+      const r = await fetch("/api/sprites/characters", { credentials: "same-origin" });
+      if (!r.ok) return;
+      const body = await r.json();
+      state.characters = Array.isArray(body.characters) ? body.characters : [];
+    } catch { state.characters = []; }
+    characterSel.innerHTML = "";
+    if (!state.characters.length) {
+      const o = document.createElement("option");
+      o.value = "admin"; o.textContent = "Admin";
+      characterSel.appendChild(o);
+    } else {
+      for (const c of state.characters) {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = c.label + (c.hasSheets ? "" : "  (no sheets yet)");
+        characterSel.appendChild(o);
+      }
+    }
+    if (![...characterSel.options].some((o) => o.value === state.character)) {
+      state.character = characterSel.options[0]?.value || "admin";
+    }
+    characterSel.value = state.character;
+  }
+
   // ----- manifest + saved-slices fetch -----
   async function loadManifest() {
     const [mRes, sRes] = await Promise.all([
-      fetch("/api/sprites/manifest", { credentials: "same-origin" }),
+      fetch("/api/sprites/manifest?character=" + encodeURIComponent(state.character), { credentials: "same-origin" }),
       fetch("/api/sprites/slices",   { credentials: "same-origin" }),
     ]);
     if (mRes.status === 401 || mRes.status === 403) {
@@ -153,7 +184,54 @@
     state.savedSlices = sRes.ok ? await sRes.json() : {};
     populateControls();
     rebuild();
+    // If this character has no sheets uploaded yet, surface that clearly so
+    // the empty preview grid isn't mistaken for a load failure.
+    const hasAny = Object.values(state.manifest.animations || {}).some((v) => Object.keys(v).length);
+    if (!hasAny) {
+      setStatus(`No spritesheets found for "${state.character}". Drop PNGs into client/assets/sprites/${state.character}/base/<anim>-spritesheets/<variant>/.`);
+    } else {
+      setStatus("");
+    }
   }
+
+  // Character dropdown — switching reloads the manifest for that character.
+  characterSel.addEventListener("change", () => {
+    state.character = characterSel.value;
+    loadManifest();
+  });
+
+  // "Apply settings to other character" — copy every slice this character
+  // has saved onto the matching sheets of another character.
+  applyOtherCharBtn.addEventListener("click", async () => {
+    const others = state.characters.filter((c) => c.id !== state.character);
+    if (!others.length) {
+      alert("No other character folders exist. Create one under client/assets/sprites/<name>/base/ first.");
+      return;
+    }
+    const list = others.map((c, i) => `${i + 1}. ${c.label} (${c.id})`).join("\n");
+    const pick = prompt(
+      `Copy every saved slice from "${state.character}" to which character?\n\n${list}\n\nEnter the number:`,
+      "1"
+    );
+    if (!pick) return;
+    const idx = parseInt(pick, 10) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= others.length) return;
+    const target = others[idx];
+    if (!confirm(`This will overwrite "${target.label}"'s existing slice settings for any matching sheets. Continue?`)) return;
+    try {
+      const r = await fetch("/api/sprites/copy-slices", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: state.character, to: target.id }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body?.error || r.statusText);
+      setStatus(`Copied ${body.copied} slice${body.copied === 1 ? "" : "s"} to ${target.label} (${body.skipped} skipped — no matching sheet on disk).`, true);
+    } catch (err) {
+      setStatus("Copy failed: " + err.message);
+    }
+  });
   function lookupSaved(url) {
     return (state.savedSlices && state.savedSlices[url]) || null;
   }
@@ -951,5 +1029,8 @@
 
   // ----- init -----
   applyDefaultFrames();
-  loadManifest();
+  (async () => {
+    await loadCharacterList();
+    await loadManifest();
+  })();
 })();

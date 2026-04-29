@@ -731,11 +731,26 @@ button.ghost:hover {
   text-align: center;
   max-width: 12rem;
 }
+/* Name + race badge sit BELOW the portrait. The name is sized down so a
+   long forged name (e.g. "Aerynd of Firstlight") never wraps over the
+   portrait above or the stats grid below, and the row stacks gracefully
+   on narrow screens. */
 .char-head {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.7rem;
   flex-wrap: wrap;
+  margin-top: 0.2rem;
+  text-align: center;
+}
+.char-head .card-title {
+  font-size: 1.25rem;
+  line-height: 1.15;
+  margin: 0;
+  letter-spacing: 0.04em;
+  word-break: break-word;
+  max-width: 14ch;
 }
 .race-badge {
   font-family: var(--font-display);

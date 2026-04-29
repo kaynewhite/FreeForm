@@ -64,14 +64,18 @@ const RACE_WEAPON = {
 // channeled Output (5–100%), so a low-output bolt is cheap and weak, a
 // full-output bolt is expensive and decisive. Range is generous so it
 // rewards positioning over twitch reflexes.
+// Per design doc §14.1 — "Spells have NO cooldowns — only mana cost."
+// Per §14.2 + §14.5 — Mana Bolt at Lv1 costs 50 mana FIXED and deals 1.0×
+// base damage. Output% (5–100) scales DAMAGE only, never cost (the player
+// chooses how decisive each shot is; the mana spent is always 50).
 const SPELL = {
   mana_bolt: {
     name: "Mana Bolt",
-    cost: 30,            // mana (multiplied by output)
-    cd:   900,           // ms cooldown
+    cost: 50,            // FIXED mana cost (not multiplied by output)
+    cd:   0,             // no cooldown — design doc §14.1
     reach: 8,            // tiles forward
     width: 0.55,         // half-width perpendicular
-    dmg:  18,            // base, then +control*0.6, all × output
+    dmg:  18,            // base; +control*0.6 then × output% (1.0× at 100%)
     speed: 22,           // tiles/sec — purely cosmetic for the client beam
   },
 };
@@ -479,15 +483,19 @@ function init(server, sessionSecret) {
     const spell = SPELL[spellKey];
     if (!spell) return;
     const now = Date.now();
-    if (now < caster.castCdUntil) return;
-    const cost = Math.max(1, Math.round(spell.cost * output));
+    // Per design doc §14.1 — mana cost is the only gate; no cooldown.
+    if (spell.cd > 0 && now < caster.castCdUntil) return;
+    // Cost is FIXED per §14.5 (Mana Bolt Lv1 = 50 mana). Output scales damage,
+    // not cost — choosing 5% Output still spends the full 50 mana.
+    const cost = Math.max(1, Math.round(spell.cost));
     if (caster.mana < cost) {
       try { caster.ws.send(JSON.stringify({ type: "cast_denied", spell: spellKey, reason: "mana" })); } catch {}
       return;
     }
     caster.mana -= cost;
-    // Cast speed reduces the cooldown — fast casters cycle bolts faster.
-    caster.castCdUntil = now + Math.max(150, Math.round(spell.cd / Math.max(0.5, caster.castSpeed || 1)));
+    if (spell.cd > 0) {
+      caster.castCdUntil = now + Math.max(150, Math.round(spell.cd / Math.max(0.5, caster.castSpeed || 1)));
+    }
 
     const dmg = Math.max(1, Math.round((spell.dmg + (caster.control || 0) * 0.6) * output));
 

@@ -48,9 +48,9 @@
         "h": 54
       }
     ],
-    "fps": 2,
+    "fps": 1,
     "scale": 3,
-    "updatedAt": "2026-04-27T18:18:37.346Z",
+    "updatedAt": "2026-04-27T16:32:00.732Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleRight-spritesheet.png": {
@@ -102,9 +102,7 @@
         "h": 54
       }
     ],
-    "fps": 2,
-    "scale": 3,
-    "updatedAt": "2026-04-27T18:18:05.456Z",
+    "updatedAt": "2026-04-27T13:43:30.114Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleLeft-spritesheet.png": {
@@ -129,9 +127,7 @@
         "h": 54
       }
     ],
-    "fps": 2,
-    "scale": 3,
-    "updatedAt": "2026-04-27T18:18:14.202Z",
+    "updatedAt": "2026-04-27T13:44:59.375Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleRight-spritesheet.png": {
@@ -156,9 +152,9 @@
         "h": 54
       }
     ],
-    "fps": 2,
+    "fps": 8,
     "scale": 3,
-    "updatedAt": "2026-04-27T18:18:02.526Z",
+    "updatedAt": "2026-04-27T13:48:31.908Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/with-dagger/admin-dagger-idleUp-spritesheet.png": {
@@ -183,9 +179,9 @@
         "h": 54
       }
     ],
-    "fps": 2,
+    "fps": 8,
     "scale": 3,
-    "updatedAt": "2026-04-27T18:18:18.645Z",
+    "updatedAt": "2026-04-27T13:49:02.452Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/idle-spritesheets/no-weapon/admin-idleDown-spritesheet.png": {
@@ -210,37 +206,9 @@
         "h": 54
       }
     ],
-    "fps": 2,
+    "fps": 1,
     "scale": 3,
-    "updatedAt": "2026-04-27T18:18:30.300Z",
-    "updatedBy": 1
-  },
-  "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkRight-spritesheet.png": {
-    "frames": 9,
-    "frameW": 32,
-    "frameH": 54,
-    "offsetX": 0,
-    "offsetY": 0,
-    "gapX": 32,
-    "perFrame": false,
-    "frameRects": null,
-    "fps": 10,
-    "scale": 3,
-    "updatedAt": "2026-04-27T17:53:30.991Z",
-    "updatedBy": 1
-  },
-  "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkUp-spritesheet.png": {
-    "frames": 9,
-    "frameW": 32,
-    "frameH": 54,
-    "offsetX": 0,
-    "offsetY": 0,
-    "gapX": 32,
-    "perFrame": false,
-    "frameRects": null,
-    "fps": 10,
-    "scale": 3,
-    "updatedAt": "2026-04-27T17:54:17.691Z",
+    "updatedAt": "2026-04-27T16:31:19.271Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkDown-spritesheet.png": {
@@ -254,7 +222,7 @@
     "frameRects": null,
     "fps": 10,
     "scale": 3,
-    "updatedAt": "2026-04-27T17:54:50.412Z",
+    "updatedAt": "2026-04-29T15:12:27.768Z",
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkLeft-spritesheet.png": {
@@ -268,150 +236,35 @@
     "frameRects": null,
     "fps": 10,
     "scale": 3,
-    "updatedAt": "2026-04-27T17:55:04.915Z",
+    "updatedAt": "2026-04-29T15:13:14.721Z",
     "updatedBy": 1
   },
-  "/assets/sprites/admin/base/attack-spritesheets/no-weapon/admin-attackDown-spritesheet.png": {
-    "frames": 12,
-    "frameW": 33,
-    "frameH": 52,
+  "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkRight-spritesheet.png": {
+    "frames": 9,
+    "frameW": 32,
+    "frameH": 54,
     "offsetX": 0,
     "offsetY": 0,
     "gapX": 32,
-    "perFrame": true,
-    "frameRects": [
-      {
-        "x": 0,
-        "y": 0,
-        "w": 33,
-        "h": 52
-      },
-      {
-        "x": 64,
-        "y": 0,
-        "w": 35,
-        "h": 52
-      },
-      {
-        "x": 126,
-        "y": 0,
-        "w": 36,
-        "h": 52
-      },
-      {
-        "x": 195,
-        "y": 0,
-        "w": 33,
-        "h": 52
-      },
-      {
-        "x": 260,
-        "y": 0,
-        "w": 36,
-        "h": 52
-      },
-      {
-        "x": 322,
-        "y": 0,
-        "w": 40,
-        "h": 52
-      },
-      {
-        "x": 384,
-        "y": 0,
-        "w": 34,
-        "h": 52
-      },
-      {
-        "x": 451,
-        "y": 0,
-        "w": 39,
-        "h": 52
-      },
-      {
-        "x": 515,
-        "y": 0,
-        "w": 36,
-        "h": 52
-      },
-      {
-        "x": 577,
-        "y": 0,
-        "w": 36,
-        "h": 52
-      },
-      {
-        "x": 638,
-        "y": 0,
-        "w": 36,
-        "h": 52
-      },
-      {
-        "x": 703,
-        "y": 0,
-        "w": 35,
-        "h": 52
-      }
-    ],
-    "fps": 1,
-    "scale": 3,
-    "updatedAt": "2026-04-27T19:06:38.303Z",
-    "updatedBy": 1
-  },
-  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castDown-spritesheet.png": {
-    "frames": 7,
-    "frameW": 50,
-    "frameH": 52,
-    "offsetX": 0,
-    "offsetY": 0,
-    "gapX": 12,
     "perFrame": false,
     "frameRects": null,
-    "fps": 2,
+    "fps": 10,
     "scale": 3,
-    "updatedAt": "2026-04-27T19:15:20.559Z",
+    "updatedAt": "2026-04-29T15:13:18.025Z",
     "updatedBy": 1
   },
-  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castLeft-spritesheet.png": {
-    "frames": 7,
-    "frameW": 34,
-    "frameH": 52,
+  "/assets/sprites/admin/base/walking-spritesheets/no-weapon/admin-walkUp-spritesheet.png": {
+    "frames": 9,
+    "frameW": 32,
+    "frameH": 54,
     "offsetX": 0,
     "offsetY": 0,
-    "gapX": 30,
+    "gapX": 32,
     "perFrame": false,
     "frameRects": null,
-    "fps": 2,
+    "fps": 10,
     "scale": 3,
-    "updatedAt": "2026-04-27T19:10:52.191Z",
-    "updatedBy": 1
-  },
-  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castRight-spritesheet.png": {
-    "frames": 7,
-    "frameW": 34,
-    "frameH": 52,
-    "offsetX": 0,
-    "offsetY": 0,
-    "gapX": 30,
-    "perFrame": false,
-    "frameRects": null,
-    "fps": 2,
-    "scale": 3,
-    "updatedAt": "2026-04-27T19:10:52.192Z",
-    "updatedBy": 1
-  },
-  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castUp-spritesheet.png": {
-    "frames": 7,
-    "frameW": 34,
-    "frameH": 52,
-    "offsetX": 0,
-    "offsetY": 0,
-    "gapX": 30,
-    "perFrame": false,
-    "frameRects": null,
-    "fps": 2,
-    "scale": 3,
-    "updatedAt": "2026-04-27T19:10:52.449Z",
+    "updatedAt": "2026-04-29T15:13:06.962Z",
     "updatedBy": 1
   }
 }

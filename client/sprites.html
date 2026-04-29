@@ -33,6 +33,10 @@
 
       <div class="ctrl-row">
         <label class="ctrl">
+          <span>Character</span>
+          <select id="character-select" title="Pick which character's sheets to calibrate."></select>
+        </label>
+        <label class="ctrl">
           <span>Weapon</span>
           <select id="weapon-select"></select>
         </label>
@@ -77,6 +81,9 @@
           </label>
           <button id="apply-all-btn" class="link-btn" type="button">
             Apply slice to all directions
+          </button>
+          <button id="apply-other-char-btn" class="link-btn" type="button" title="Copy every saved slice from this character to another character's matching sheets.">
+            Apply settings to other character…
           </button>
         </div>
       </div>

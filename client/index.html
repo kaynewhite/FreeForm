@@ -67,7 +67,7 @@
     </div>
 
     <!-- AUTH -->
-    <section class="tome" id="auth-card">
+    <section class="tome" id="auth-card" hidden>
       <span class="corner tl"></span>
       <span class="corner tr"></span>
       <span class="corner bl"></span>
@@ -450,12 +450,39 @@
             <option value="erase">Erase</option>
           </select>
         </label>
+        <label class="ctrl">
+          <span>Fill</span>
+          <select id="palette-fill-mode" title="Pick a fill rule, then press Apply.">
+            <option value="empty">Empty tiles only</option>
+            <option value="edges">Visible edges</option>
+            <option value="same">Replace same as cursor</option>
+            <option value="all">Every visible tile</option>
+          </select>
+        </label>
+        <button class="ghost" id="palette-fill-btn" type="button" title="Apply fill across the visible viewport.">Apply Fill</button>
         <button class="ghost danger" id="palette-clear-btn" type="button">Clear layer</button>
       </div>
       <p class="palette-selected">Selected: <span id="palette-selected-readout">none — pick a tile</span></p>
       <div class="palette-body" id="palette-body">Loading tilesets…</div>
-      <p class="palette-hint">Left-click world: paint · Right-click: erase · WASD/Arrows: pan · Esc: close</p>
+      <p class="palette-hint">Left-click world: paint · Right-click: erase · WASD/Arrows: pan · Esc: close · <strong>Fill</strong>: paint a region within the current viewport.</p>
     </aside>
+
+    <!-- Loading veil shown while the realm fetches the world from disk. -->
+    <div class="realm-loading" id="realm-loading" hidden>
+      <div class="rl-frame">
+        <div class="rl-sigil" aria-hidden="true">
+          <svg viewBox="0 0 60 60" width="48" height="48">
+            <circle cx="30" cy="30" r="22" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.45"/>
+            <circle cx="30" cy="30" r="12" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <circle cx="30" cy="8" r="2" fill="currentColor">
+              <animateTransform attributeName="transform" type="rotate" from="0 30 30" to="360 30 30" dur="1.4s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        </div>
+        <p class="rl-title" id="rl-title">Weaving the realm…</p>
+        <div class="rl-bar"><div class="rl-bar-fill" id="rl-bar-fill"></div></div>
+      </div>
+    </div>
 
     <!-- ============================================================ -->
     <!-- MODALS — Atlas, Settings, Vessel, Satchel, Spellbook, ...   -->
