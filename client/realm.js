@@ -333,7 +333,7 @@
     keys: new Set(),            // currently held keys for movement / panning
     tilesets: new Map(),        // name -> { meta, image }
     editor: { open: false, mode: "we", selected: null, brush: "paint", layer: "ground" },
-    mouse: { x: 0, y: 0, tileX: 0, tileY: 0, leftDown: false, rightDown: false },
+    mouse: { x: 0, y: 0, tileX: 0, tileY: 0, worldX: 0, worldY: 0, leftDown: false, rightDown: false },
 
     // ---- character / vessel (snapshot from /api/characters/me at enter) ----
     // The base stat block (max_hp, mana_cap, stamina_cap, control, etc.)
@@ -511,6 +511,12 @@
     const { x, y } = eventToTileCoords(e);
     state.mouse.tileX = x;
     state.mouse.tileY = y;
+    // Float world coords (sub-tile precision) — used by sendCast() to aim
+    // a spell at exactly where the cursor is, regardless of facing.
+    const rect = canvas.getBoundingClientRect();
+    const tilePx = state.tileSize * state.zoom;
+    state.mouse.worldX = (e.clientX - rect.left) / tilePx + state.cameraX;
+    state.mouse.worldY = (e.clientY - rect.top) / tilePx + state.cameraY;
     // (Coords readout is updated each frame from the player's own position
     // — see the tick loop — so it always reads as a tidy pair of integers.)
     // Drag-paint: holding the mouse button while moving keeps painting.
@@ -1377,9 +1383,25 @@
   // Slot-2 cast — Mana Bolt for now. The dial-in `output` (5–100%) is sent
   // as a unit float; server pays the mana, picks the first target in the
   // lane in front of us, and broadcasts a {bolt} for everyone to render.
+  // Aim follows the CURSOR, not the player's movement facing — clicking
+  // to your right while facing left auto-rotates the caster and fires
+  // east. The dominant axis between the cursor and the player picks one
+  // of the four cardinal facings, matching the server's VALID_FACINGS.
+  function aimFacingFromCursor() {
+    if (!state.me) return state.me?.facing || "down";
+    const dx = (state.mouse.worldX || 0) - (state.me.x || 0);
+    const dy = (state.mouse.worldY || 0) - (state.me.y || 0);
+    if (Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) return state.me.facing || "down";
+    return Math.abs(dx) > Math.abs(dy)
+      ? (dx > 0 ? "right" : "left")
+      : (dy > 0 ? "down"  : "up");
+  }
   function sendCast(spell) {
     if (!state.wsReady || !state.me) return;
-    const facing = state.me.facing || "down";
+    const facing = aimFacingFromCursor();
+    // Snap the local avatar so the rotation is felt immediately — the
+    // server will echo the same facing on the next state tick.
+    state.me.facing = facing;
     const output = Math.max(0.05, Math.min(1, (state.output || 100) / 100));
     try { state.ws.send(JSON.stringify({ type: "cast", spell, facing, output })); } catch {}
   }

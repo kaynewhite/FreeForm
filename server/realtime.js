@@ -59,24 +59,25 @@ const RACE_WEAPON = {
   Voidborn: "Katana",
 };
 
-// Castable spells. The first one any vessel can sling — Mana Bolt — is a
-// straight-line searing dart. Cost + damage both scale with the player's
-// channeled Output (5–100%), so a low-output bolt is cheap and weak, a
-// full-output bolt is expensive and decisive. Range is generous so it
-// rewards positioning over twitch reflexes.
-// Per design doc §14.1 — "Spells have NO cooldowns — only mana cost."
-// Per §14.2 + §14.5 — Mana Bolt at Lv1 costs 50 mana FIXED and deals 1.0×
-// base damage. Output% (5–100) scales DAMAGE only, never cost (the player
-// chooses how decisive each shot is; the mana spent is always 50).
+// Castable spells. Per design doc §14.1 spells have NO cooldowns; mana is
+// the only gate (terrain-altering spells in §14.3 are the exception).
+// Mana Bolt is the universal starter — straight-line, lance-shaped lane.
+// Per §3.5: cost = BaseCost × (Output%/100) × (1 - Efficiency%/100).
+// Per §4.1+§4.2: dmg = base × Output × power × (1+0.1×(lv-1)) × Min(10, 1+log10(ManaCap/500)).
+// Aim is determined by the cursor at the moment of cast — see realm.js
+// sendCast() — the server just trusts the facing the client sends and
+// snaps the player to it.
 const SPELL = {
   mana_bolt: {
     name: "Mana Bolt",
-    cost: 50,            // FIXED mana cost (not multiplied by output)
-    cd:   0,             // no cooldown — design doc §14.1
+    cost: 50,            // BaseCost (multiplied by output and (1-eff))
+    cd:   0,             // §14.1 — no cooldown
     reach: 8,            // tiles forward
     width: 0.55,         // half-width perpendicular
-    dmg:  18,            // base; +control*0.6 then × output% (1.0× at 100%)
-    speed: 22,           // tiles/sec — purely cosmetic for the client beam
+    dmg:  50,            // base damage unit (multiplied by manaCap-mult etc.)
+    power: 1.0,          // SpellBasePower per §14.2 (Mana Bolt = 1.0)
+    lv:   1,             // grimoire level (1-10); upgraded later
+    speed: 22,           // tiles/sec — cosmetic for the client beam
   },
 };
 
@@ -244,13 +245,10 @@ function init(server, sessionSecret) {
       const sid = parseSessionId(req, sessionSecret);
       if (!sid) return reject(socket, 401);
       const sess = await loadSession(sid);
-      if (!sess?.userId) return reject(socket, 401);
-      // Server 0 (the only shard right now) is the Architect's canvas. Until
-      // /command create_server + /command world_publish ship a player-facing
-      // shard, only admins may step in. Players get a polite refusal.
-      if (sess.role !== "admin") {
-        return reject(socket, 403, "No published server yet");
-      }
+      if (!sess?.userId) return reject(socket, 401, "Not signed in");
+      // The default shard is the shared world for everyone — admins can
+      // build, players can roam and cast. Per-server isolation lands when
+      // /command create_server + /command world_publish ship.
       const char = await loadLivingCharacter(sess.userId);
       if (!char) return reject(socket, 409, "No living vessel");
 
@@ -483,11 +481,15 @@ function init(server, sessionSecret) {
     const spell = SPELL[spellKey];
     if (!spell) return;
     const now = Date.now();
-    // Per design doc §14.1 — mana cost is the only gate; no cooldown.
+    // Per design doc §14.1 — mana cost is the only gate for non-terrain
+    // spells. Terrain-altering spells (Earth Wall, etc.) keep their cd.
     if (spell.cd > 0 && now < caster.castCdUntil) return;
-    // Cost is FIXED per §14.5 (Mana Bolt Lv1 = 50 mana). Output scales damage,
-    // not cost — choosing 5% Output still spends the full 50 mana.
-    const cost = Math.max(1, Math.round(spell.cost));
+
+    // Per design doc §3.5: Spell Cost = BaseCost × (Output%/100) × (1 - Efficiency%/100)
+    // Mana Bolt at Lv1 has BaseCost = 50; at 20% Output = 10 mana.
+    // Efficiency is the player's stat (0-50%, capped 75% for Arcanists).
+    const eff = Math.min(0.75, Math.max(0, (caster.efficiency || 0) / 100));
+    const cost = Math.max(1, Math.round((spell.cost || 0) * output * (1 - eff)));
     if (caster.mana < cost) {
       try { caster.ws.send(JSON.stringify({ type: "cast_denied", spell: spellKey, reason: "mana" })); } catch {}
       return;
@@ -497,7 +499,17 @@ function init(server, sessionSecret) {
       caster.castCdUntil = now + Math.max(150, Math.round(spell.cd / Math.max(0.5, caster.castSpeed || 1)));
     }
 
-    const dmg = Math.max(1, Math.round((spell.dmg + (caster.control || 0) * 0.6) * output));
+    // Per design doc §4.1 + §4.2 — diminishing-returns damage scaling.
+    // Damage = baseUnit × Output × SpellBasePower × (1 + 0.1×SpellLv) × Min(10, 1+log10(ManaCap/500))
+    // baseUnit = 50 keeps starter players around 55 dmg/bolt at full output
+    // (≈4 hits to take a 200 HP vessel) and admins around 110 (≈2 hits).
+    const manaCap = Math.max(1, caster.manaCap || 500);
+    const dmgMult = Math.min(10, 1 + Math.log10(manaCap / 500));
+    const spellLv = Math.max(1, spell.lv || 1);
+    const lvScale = 1 + 0.1 * (spellLv - 1); // Lv1 = 1.0x, Lv10 = 1.9x
+    const baseUnit = spell.dmg || 50;
+    const power = spell.power || 1.0;
+    const dmg = Math.max(1, Math.round(baseUnit * output * power * lvScale * dmgMult));
 
     const fv = FACING_VEC[caster.facing] || FACING_VEC.down;
     const px = -fv.y, py = fv.x;

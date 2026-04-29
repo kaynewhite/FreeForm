@@ -60,6 +60,11 @@
           <input id="play-toggle" type="checkbox" checked />
           <span>Playing</span>
         </label>
+        <button id="save-all-btn" class="save-btn" type="button" disabled
+          title="Write every unsaved slice to disk. Edits are kept in memory until you click this.">
+          <span class="save-label">Save changes</span>
+          <span class="save-count" id="save-count" hidden>0</span>
+        </button>
       </div>
 
       <p class="ctrl-hint" id="layout-hint">—</p>

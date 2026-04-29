@@ -59,13 +59,62 @@
   }
 
   // ----- persistence -----
-  // Per-card debounced save to /api/sprites/slice. Drag-end / reset / apply-all
-  // bypass the debounce and save (or delete) immediately.
-  const saveTimers = new WeakMap();
-  function scheduleSave(card, delay = 400) {
-    clearTimeout(saveTimers.get(card));
-    saveTimers.set(card, setTimeout(() => saveSlice(card), delay));
+  // **No autosave.** Edits live only in memory until the admin clicks the
+  // "Save changes" button in the header. markDirty() bookkeeping tracks
+  // unsaved cards and updates the button's count.
+  const dirtyCards = new Set();
+  const saveBtn = document.getElementById("save-all-btn");
+  const saveCountEl = document.getElementById("save-count");
+  function markDirty(card) {
+    if (!card || !card.url) return;
+    dirtyCards.add(card);
+    flashSaveBadge(card, "unsaved", false, true);
+    refreshSaveButton();
   }
+  function markClean(card) {
+    if (!card) return;
+    dirtyCards.delete(card);
+    refreshSaveButton();
+  }
+  function refreshSaveButton() {
+    if (!saveBtn) return;
+    const n = dirtyCards.size;
+    saveBtn.disabled = n === 0;
+    saveBtn.classList.toggle("has-unsaved", n > 0);
+    if (saveCountEl) {
+      saveCountEl.textContent = String(n);
+      saveCountEl.hidden = n === 0;
+    }
+  }
+  async function saveAllDirty() {
+    if (dirtyCards.size === 0) return;
+    const cards = [...dirtyCards];
+    saveBtn.disabled = true;
+    setStatus(`Saving ${cards.length}…`, false);
+    let ok = 0, bad = 0;
+    await Promise.all(cards.map(async (c) => {
+      try { await saveSlice(c); ok++; }
+      catch { bad++; }
+    }));
+    setStatus(bad ? `Saved ${ok}, failed ${bad}.` : `Saved ${ok}.`, !bad);
+    setTimeout(() => setStatus(""), 1800);
+    refreshSaveButton();
+  }
+  if (saveBtn) saveBtn.addEventListener("click", saveAllDirty);
+  // Ctrl/Cmd-S also flushes — admins live on keyboards.
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+      e.preventDefault();
+      saveAllDirty();
+    }
+  });
+  // Warn before leaving if anything is still unsaved.
+  window.addEventListener("beforeunload", (e) => {
+    if (dirtyCards.size === 0) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
   async function saveSlice(card) {
     if (!card || !card.url || !card.sheet) return;
     try {
@@ -77,10 +126,12 @@
       });
       if (!r.ok) throw new Error(await r.text());
       card.savedSlice = clonePayload(card);
+      markClean(card);
       flashSaveBadge(card, "saved");
     } catch (err) {
       console.error("save slice failed", err);
       flashSaveBadge(card, "save failed", true);
+      throw err;
     }
   }
   function slicePayload(card) {
@@ -112,20 +163,27 @@
       });
       if (!r.ok) throw new Error(await r.text());
       card.savedSlice = null;
+      markClean(card);
       flashSaveBadge(card, "reset");
     } catch (err) {
       console.error("delete slice failed", err);
       flashSaveBadge(card, "reset failed", true);
     }
   }
-  function flashSaveBadge(card, text, bad = false) {
+  function flashSaveBadge(card, text, bad = false, sticky = false) {
     const badge = card.tweak.querySelector(".save-badge");
     if (!badge) return;
     badge.textContent = text;
     badge.classList.toggle("is-bad", bad);
+    badge.classList.toggle("is-unsaved", !!sticky);
     badge.classList.add("is-visible");
     clearTimeout(badge._t);
-    badge._t = setTimeout(() => badge.classList.remove("is-visible"), 1400);
+    if (!sticky) {
+      badge._t = setTimeout(() => {
+        badge.classList.remove("is-visible");
+        badge.classList.remove("is-unsaved");
+      }, 1400);
+    }
   }
 
   // ----- image cache -----
@@ -292,7 +350,7 @@
     if (!card) return;
     card.fps = state.fps;
     updateCardMeta(card);
-    scheduleSave(card);
+    markDirty(card);
   });
   scaleInput.addEventListener("input", () => {
     syncFromControls();
@@ -301,7 +359,7 @@
     card.scale = state.scale;
     sizePreviewCanvas(card);
     updateCardMeta(card);
-    scheduleSave(card);
+    markDirty(card);
   });
   playToggle.addEventListener("change", syncFromControls);
 
@@ -335,11 +393,11 @@
       writeInputsFrom(c);
       sizePreviewCanvas(c);
       updateCardMeta(c);
-      saveSlice(c);
+      markDirty(c);
     }
-    saveSlice(src);
-    setStatus("Applied slice to all directions.", true);
-    setTimeout(() => setStatus(""), 1800);
+    markDirty(src);
+    setStatus("Applied slice to all directions — click Save changes to commit.", true);
+    setTimeout(() => setStatus(""), 2400);
   });
 
   function applyDefaultFrames() {
@@ -627,7 +685,7 @@
     sizePreviewCanvas(card);
     updateCardMeta(card);
     if (card === previewCards[state.activeIndex]) drawSheetOverlay();
-    scheduleSave(card);
+    markDirty(card);
   }
 
   function togglePerFrame(card, on) {
@@ -652,7 +710,7 @@
     sizePreviewCanvas(card);
     updateCardMeta(card);
     if (card === previewCards[state.activeIndex]) drawSheetOverlay();
-    saveSlice(card);
+    markDirty(card);
   }
 
   function ensureFrameRectsShape(card) {
@@ -1022,7 +1080,7 @@
       sizePreviewCanvas(card);
       updateCardMeta(card);
       updateRawMeta(card);
-      saveSlice(card); // drag-end saves immediately
+      markDirty(card); // no autosave — user must click Save changes
     }
     drawSheetOverlay();
   });
