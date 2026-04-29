@@ -3,11 +3,37 @@
   "tileSize": 16,
   "defaultGround": "grass:0",
   "createdAt": "2026-04-27T17:37:50.302Z",
-  "updatedAt": "2026-04-29T13:05:06.811Z",
+  "updatedAt": "2026-04-29T14:37:10.350Z",
   "layers": [
     {
       "name": "ground",
-      "tiles": {}
+      "tiles": {
+        "0,0": "terrain_set:321",
+        "1,0": "terrain_set:321",
+        "1,-1": "terrain_set:321",
+        "0,-1": "terrain_set:321",
+        "-1,-1": "terrain_set:321",
+        "-1,0": "terrain_set:321",
+        "-1,1": "terrain_set:321",
+        "1,1": "terrain_set:321",
+        "0,1": "terrain_set:321",
+        "-1,2": "terrain_set:353",
+        "1,2": "terrain_set:353",
+        "0,2": "terrain_set:353",
+        "-1,-2": "terrain_set:289",
+        "0,-2": "terrain_set:289",
+        "1,-2": "terrain_set:289",
+        "2,1": "terrain_set:322",
+        "2,0": "terrain_set:322",
+        "2,-1": "terrain_set:322",
+        "-2,1": "terrain_set:320",
+        "-2,0": "terrain_set:320",
+        "-2,-1": "terrain_set:320",
+        "-2,-2": "terrain_set:288",
+        "-2,2": "terrain_set:352",
+        "2,-2": "terrain_set:290",
+        "2,2": "terrain_set:354"
+      }
     },
     {
       "name": "decor",
