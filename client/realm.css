@@ -28,8 +28,8 @@
   color: var(--ink);
   overflow: hidden;
   font-family: var(--font-script, "Cormorant Garamond", serif);
-  --hud-h: 168px;          /* total bottom-HUD height (incl. corner trim) */
-  --rail-w: 64px;          /* right-rail Codex width */
+  --hud-h: 134px;          /* total bottom-HUD height (incl. corner trim) */
+  --rail-w: 52px;          /* right-rail Codex width */
 }
 .realm-canvas {
   position: absolute;
@@ -224,10 +224,10 @@
    ╚═══════════════════════════════════════════════════════════╝ */
 .hud-atlas {
   position: absolute;
-  top: 14px;
+  top: 12px;
   /* Sit just to the LEFT of the right rail so they never overlap. */
-  right: calc(var(--rail-w) + 28px);
-  width: 220px;
+  right: calc(var(--rail-w) + 22px);
+  width: 168px;
   z-index: 5;
 }
 .atlas-frame {
@@ -317,7 +317,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 46px;
+  height: 36px;
   background:
     linear-gradient(180deg, rgba(46,30,52,0.55), rgba(16,12,20,0.85));
   border: 1px solid var(--gold-deep);
@@ -358,11 +358,11 @@
    ╚═══════════════════════════════════════════════════════════╝ */
 .hud-chat {
   position: absolute;
-  left: 14px;
+  left: 12px;
   /* Sit above the bottom HUD with breathing room. */
-  bottom: calc(var(--hud-h) + 28px);
-  width: min(380px, 32vw);
-  max-height: 38vh;
+  bottom: calc(var(--hud-h) + 18px);
+  width: min(320px, 26vw);
+  max-height: 30vh;
   display: flex;
   flex-direction: column;
   background:
@@ -430,7 +430,7 @@
   padding: 0.45rem 0.55rem 0.55rem;
 }
 .chat-log {
-  max-height: 26vh;
+  max-height: 18vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -456,17 +456,19 @@
   display: flex;
   align-items: center;
   gap: 0;
-  background: rgba(0,0,0,0.55);
-  border: 1px solid var(--gold-deep);
+  /* Brighter slab so the input line is unmistakable against the dark map. */
+  background: linear-gradient(180deg, rgba(36,28,46,0.95), rgba(18,14,24,0.95));
+  border: 1px solid var(--gold-2, #d8b257);
   border-radius: 2px;
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.10), 0 0 8px rgba(0,0,0,0.5);
 }
 .cir-glyph {
   padding: 0 0.55rem;
-  color: var(--gold-2);
-  font-size: 1rem;
-  border-right: 1px solid var(--gold-deep);
-  background: rgba(0,0,0,0.45);
+  color: var(--gold-1, #f6e4a3);
+  font-size: 0.95rem;
+  border-right: 1px solid var(--gold-2, #d8b257);
+  background: rgba(0,0,0,0.55);
   align-self: stretch;
   display: inline-flex;
   align-items: center;
@@ -474,14 +476,22 @@
 .chat-input-row input {
   flex: 1;
   background: transparent;
-  color: var(--ink);
+  color: #fff7d8;
   border: 0;
-  padding: 0.55rem 0.7rem;
+  padding: 0.5rem 0.7rem;
   font-family: inherit;
-  font-size: 1rem;
+  font-size: 0.95rem;
   outline: none;
+  caret-color: var(--gold-1, #f6e4a3);
 }
-.chat-input-row:focus-within { border-color: var(--gold-2); box-shadow: 0 0 8px rgba(216,178,87,0.4); }
+.chat-input-row input::placeholder {
+  color: rgba(246,228,163,0.55);
+  font-style: italic;
+}
+.chat-input-row:focus-within {
+  border-color: #f6e4a3;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.25), 0 0 14px rgba(216,178,87,0.55);
+}
 
 /* ╔═══════════════════════════════════════════════════════════╗
    ║ BOTTOM — Output meter (above the HUD plate)               ║
@@ -550,12 +560,12 @@
 .hud-plate {
   position: absolute;
   left: 50%;
-  bottom: 12px;
+  bottom: 10px;
   transform: translateX(-50%);
   display: flex;
   align-items: stretch;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 8px 12px;
   height: var(--hud-h);
   /* Cap to viewport so the plate never overflows on small screens. */
   max-width: calc(100vw - 28px);
@@ -599,8 +609,8 @@
 }
 .pp-frame {
   position: relative;
-  width: 88px;
-  height: 88px;
+  width: 68px;
+  height: 68px;
   background:
     radial-gradient(ellipse 80% 80% at 50% 30%, rgba(91,140,255,0.18), transparent 60%),
     linear-gradient(180deg, #1c1410, #0a0806);
@@ -688,21 +698,21 @@
 
 /* ── plate · bars wing ────────────────────────────────────── */
 .plate-bars {
-  flex: 0 0 200px;
+  flex: 0 0 168px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.4rem;
-  padding-right: 12px;
+  gap: 0.3rem;
+  padding-right: 10px;
   border-right: 1px solid var(--gold-deep);
 }
 .vbar {
   display: grid;
-  grid-template-columns: 1.5rem 1fr auto;
+  grid-template-columns: 1.2rem 1fr auto;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   font-family: monospace;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   color: var(--ink-soft);
 }
 .vbar-icon {
@@ -716,7 +726,7 @@
 .bar-st .vbar-icon { color: #ffe085; text-shadow: 0 0 6px rgba(255,224,133,0.55); }
 .vbar-track {
   position: relative;
-  height: 16px;
+  height: 13px;
   background: rgba(0,0,0,0.6);
   border: 1px solid var(--gold-deep);
   border-radius: 1px;
@@ -742,7 +752,7 @@
 .bar-hp .vbar-fill { background: linear-gradient(180deg, #ff8a7a 0%, #c0392b 60%, #7a1f15 100%); }
 .bar-mp .vbar-fill { background: linear-gradient(180deg, #cfe2ff 0%, #5b8cff 50%, #2c4faa 100%); }
 .bar-st .vbar-fill { background: linear-gradient(180deg, #ffe085 0%, #d8a73a 60%, #7a5a1f 100%); }
-.vbar-num { font-size: 0.78rem; color: var(--ink); white-space: nowrap; min-width: 4.8em; text-align: right; }
+.vbar-num { font-size: 0.72rem; color: var(--ink); white-space: nowrap; min-width: 4.4em; text-align: right; }
 
 /* ── plate · hotbar (center) ─────────────────────────────── */
 .plate-hotbar {
@@ -759,8 +769,8 @@
 }
 .hb-slot {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -783,7 +793,7 @@
   letter-spacing: 0.05em;
 }
 .hb-slot .hb-icon {
-  font-size: 1.45rem;
+  font-size: 1.15rem;
   color: var(--gold-1, #f6e4a3);
   line-height: 1;
   text-shadow: 0 0 8px rgba(246,228,163,0.4);
@@ -847,7 +857,7 @@
 }
 .ps-num {
   font-family: monospace;
-  font-size: 0.95rem;
+  font-size: 0.78rem;
   color: var(--gold-1, #f6e4a3);
   text-shadow: 0 0 6px rgba(246,228,163,0.3);
 }
@@ -1242,9 +1252,37 @@
   color: var(--ink-soft);
 }
 .setting-row:last-child { border-bottom: 0; }
+.setting-row--col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
 .sr-label { display: inline-flex; gap: 0.4rem; color: var(--ink); }
 .setting-row input[type="range"] { flex: 0 0 200px; accent-color: var(--gold-2); }
 .setting-row input[type="checkbox"] { accent-color: var(--gold-2); transform: scale(1.2); }
+/* Camera-vantage radio set — stacked under its label, with golden accents
+   so the active option reads at a glance against the parchment modal. */
+.sr-radio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  padding-left: 0.2rem;
+}
+.sr-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.sr-radio em {
+  color: var(--ink-mute);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+.sr-radio input[type="radio"] { accent-color: var(--gold-2); transform: scale(1.15); }
 .settings-note { margin: 0.4rem 0 0; font-size: 0.85rem; font-style: italic; color: var(--ink-mute); }
 .settings-actions { display: flex; justify-content: flex-end; margin-top: 0.7rem; }
 .settings-actions .ghost {

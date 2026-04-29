@@ -118,8 +118,8 @@
   };
 
   // Settings inputs (saved in localStorage so preferences persist)
-  const setZoom        = $("#set-zoom");
-  const setZoomNum     = $("#set-zoom-num");
+  const setVantageHigh = $("#set-vantage-high");
+  const setVantageLow  = $("#set-vantage-low");
   const setVol         = $("#set-vol");
   const setVolNum      = $("#set-vol-num");
   const setShowFps     = $("#set-show-fps");
@@ -458,8 +458,12 @@
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
     const tilePx = state.tileSize * state.zoom;
-    const tx = Math.floor(px / tilePx) + state.cameraX;
-    const ty = Math.floor(py / tilePx) + state.cameraY;
+    // cameraX/Y is a FLOAT (camera is smoothly recentered every frame).
+    // We have to add it BEFORE flooring, otherwise we get a non-integer tile
+    // coordinate which the server rejects with 400 "invalid coords" — that's
+    // exactly the silent paint-failure bug from before.
+    const tx = Math.floor(px / tilePx + state.cameraX);
+    const ty = Math.floor(py / tilePx + state.cameraY);
     return { x: tx, y: ty };
   }
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -688,6 +692,9 @@
     paletteEl.hidden = false;
     realmEl.classList.add("is-editing");
     canvas.style.cursor = "crosshair";
+    // Remember the player-mode camera zoom so we can restore it when the
+    // editor closes — wheel-zoom is only allowed while building.
+    state.playerZoom = state.zoom;
     chat(`Editor open — /${mode}. Pick a tile, click world to paint, right-click to erase.`, "cmd");
     ensureTilesetsLoaded();
   }
@@ -696,6 +703,10 @@
     paletteEl.hidden = true;
     editFlag.hidden = true;
     realmEl.classList.remove("is-editing");
+    // Restore the camera zoom the player chose for normal play (set in
+    // Settings → Camera vantage). Without this, you'd carry an editor's
+    // 6× zoom back into the world by accident.
+    if (typeof state.playerZoom === "number") state.zoom = state.playerZoom;
     chat("Editor closed.", "cmd");
   }
   function toggleEditor(mode) {
@@ -1792,14 +1803,38 @@
   // Settings → leave button (mirror of crown leave).
   if (setLeaveBtn) setLeaveBtn.addEventListener("click", () => { closeModal(); leave(); });
 
-  // Settings → live-bind controls to state where it matters.
-  if (setZoom) {
-    setZoom.addEventListener("input", () => {
-      const z = Math.max(1, Math.min(6, +setZoom.value || 2));
-      state.zoom = z;
-      if (setZoomNum) setZoomNum.textContent = z;
-    });
+  // Settings → Camera vantage. "High" is the default wide-view (zoom ×2);
+  // "Low" pulls the camera in closer (zoom ×3) which renders fewer tiles
+  // per frame — kinder to slower devices, at the cost of render distance.
+  // Persisted in localStorage so the player's preference survives logouts.
+  const VANTAGE_ZOOM = { high: 2, low: 3 };
+  function applyVantage(v) {
+    const z = VANTAGE_ZOOM[v] || VANTAGE_ZOOM.high;
+    state.playerZoom = z;
+    // Don't yank the camera out from under the admin while they're in the
+    // middle of editing — they'll get the new zoom the next time they exit.
+    if (!state.editor.open) state.zoom = z;
   }
+  function readVantagePref() {
+    try { return localStorage.getItem("realm.vantage") === "low" ? "low" : "high"; }
+    catch { return "high"; }
+  }
+  function writeVantagePref(v) {
+    try { localStorage.setItem("realm.vantage", v); } catch {}
+  }
+  // Initialize from saved preference (also seeds state.playerZoom).
+  {
+    const v = readVantagePref();
+    if (setVantageHigh) setVantageHigh.checked = (v === "high");
+    if (setVantageLow)  setVantageLow.checked  = (v === "low");
+    applyVantage(v);
+  }
+  if (setVantageHigh) setVantageHigh.addEventListener("change", () => {
+    if (setVantageHigh.checked) { writeVantagePref("high"); applyVantage("high"); }
+  });
+  if (setVantageLow) setVantageLow.addEventListener("change", () => {
+    if (setVantageLow.checked) { writeVantagePref("low"); applyVantage("low"); }
+  });
   if (setVol) {
     setVol.addEventListener("input", () => {
       if (setVolNum) setVolNum.textContent = setVol.value;
@@ -1897,7 +1932,10 @@
       if (activeModal) { closeModal(); e.preventDefault(); return; }
       // (editor close + chat blur are handled by the older Esc handler)
     }
-    const SHORT = { m: "map", c: "character", i: "inventory",
+    // M was the old "open Map" shortcut; the Atlas already has a dedicated
+    // expand button so the keystroke is gone (it kept stealing the M key
+    // from anyone trying to type a slash command beginning with M).
+    const SHORT = { c: "character", i: "inventory",
                     k: "spellbook", j: "quests", h: "help" };
     if (SHORT[key]) {
       e.preventDefault();

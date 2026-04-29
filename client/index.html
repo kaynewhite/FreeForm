@@ -511,10 +511,19 @@
               <span class="sr-label">Show FPS counter</span>
               <input type="checkbox" id="set-show-fps" />
             </label>
-            <label class="setting-row">
-              <span class="sr-label">Camera zoom (×<span id="set-zoom-num">2</span>)</span>
-              <input type="range" min="1" max="6" step="1" id="set-zoom" value="2" />
-            </label>
+            <div class="setting-row setting-row--col">
+              <span class="sr-label">Camera vantage</span>
+              <div class="sr-radio-row">
+                <label class="sr-radio">
+                  <input type="radio" name="set-vantage" value="high" id="set-vantage-high" checked />
+                  <span>High <em>(default — wide view, more on screen)</em></span>
+                </label>
+                <label class="sr-radio">
+                  <input type="radio" name="set-vantage" value="low" id="set-vantage-low" />
+                  <span>Low <em>(closer — easier on slower devices)</em></span>
+                </label>
+              </div>
+            </div>
           </section>
           <section class="settings-block">
             <h3 class="sb-title">Audio</h3>
