@@ -1,9 +1,24 @@
-/* ---- in-game realm view ----
-   Full-viewport. Sits on top of the main shell when the player steps in.
-   The world is rendered to <canvas id="realm-canvas">. The chat rail and
-   the editor palette are absolutely-positioned overlays on top of it.
-   The page itself never scrolls — only the palette body does. */
+/* ─────────────────────────────────────────────────────────────────────
+   FreeForm — in-game HUD
+   ─────────────────────────────────────────────────────────────────────
+   Layout doctrine (everything is position:absolute over the world canvas):
 
+      ┌─────────────────────────────────────────────────────────┐
+      │ [Crown bar]                              [Atlas]        │
+      │                                          [▣▣▣▣▣ Codex] │
+      │ [Voices                                                │
+      │  chat]                                                 │
+      │                                                        │
+      │                                                        │
+      │                  ╭── Output ──╮                         │
+      │      ┌─[Portrait | Bars | Hotbar | Stats]────┐         │
+      │      └────────────── HUD plate ──────────────┘         │
+      └─────────────────────────────────────────────────────────┘
+
+   Modals appear on a dark veil and are dismissed by ✕, Esc, or veil-click.
+   The page never scrolls; only chat-log + palette body do. */
+
+/* ---- realm shell ---------------------------------------------------- */
 .realm[hidden] { display: none; }
 .realm {
   position: fixed;
@@ -13,6 +28,8 @@
   color: var(--ink);
   overflow: hidden;
   font-family: var(--font-script, "Cormorant Garamond", serif);
+  --hud-h: 168px;          /* total bottom-HUD height (incl. corner trim) */
+  --rail-w: 64px;          /* right-rail Codex width */
 }
 .realm-canvas {
   position: absolute;
@@ -26,296 +43,736 @@
   touch-action: none;
 }
 
-/* ---- top HUD ---- */
-.realm-hud-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.7rem 1rem;
-  /* Leave room on the right for the absolutely-positioned mini-map. */
-  padding-right: calc(180px + 1rem);
-  background: linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0));
-  pointer-events: none;
-  z-index: 4;
+/* Reusable gold-line + parchment dressing for HUD chrome.
+   `hud-frame` is the base class — anyone can add it for the gold double-bezel,
+   inner shadow, and faint parchment tint. Corners (.tl/.tr/.bl/.br spans)
+   give the four little L-shaped accent flourishes. */
+.hud-frame {
+  background:
+    linear-gradient(180deg, rgba(28,20,32,0.94), rgba(10,8,14,0.94));
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.06),
+    inset 0 0 24px rgba(0,0,0,0.55),
+    0 0 18px rgba(0,0,0,0.55);
 }
-.realm-hud-top > * { pointer-events: auto; }
-.realm-edit-flag {
-  margin-left: auto;
+.hud-corners > [class*="corner"],
+.atlas-frame [class*="af-corner"],
+.plate-corner,
+.pp-corner,
+.cp-frame-corner {
+  position: absolute;
+  width: 14px; height: 14px;
+  border: 1px solid var(--gold-2, #d8b257);
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 3px rgba(216,178,87,0.35));
+}
+[class*="-corner"].tl, .tl[class*="-corner"] { top:-1px; left:-1px;  border-right:none; border-bottom:none; }
+[class*="-corner"].tr, .tr[class*="-corner"] { top:-1px; right:-1px; border-left:none;  border-bottom:none; }
+[class*="-corner"].bl, .bl[class*="-corner"] { bottom:-1px; left:-1px;  border-right:none; border-top:none; }
+[class*="-corner"].br, .br[class*="-corner"] { bottom:-1px; right:-1px; border-left:none;  border-top:none; }
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ TOP-LEFT — Crown bar                                      ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hud-crown {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  z-index: 6;
+  pointer-events: none;
+}
+.hud-crown > * { pointer-events: auto; }
+
+.crown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem 0.45rem 0.65rem;
+  background:
+    linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
+  border: 1px solid var(--gold-deep);
+  color: var(--ink-soft);
   font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: #1d150a;
-  background: linear-gradient(180deg, #f6e4a3, #caa24a);
-  border: 1px solid #7a5a1f;
-  padding: 0.3rem 0.7rem;
-  border-radius: 2px;
-  box-shadow: 0 0 12px rgba(246,228,163,0.35);
+  cursor: pointer;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.05), 0 0 10px rgba(0,0,0,0.5);
+  transition: color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
-.realm-edit-flag[hidden] { display: none; }
+.crown-btn .cb-arrow {
+  font-size: 1.05rem;
+  color: var(--gold-1, #f6e4a3);
+  line-height: 1;
+}
+.crown-btn:hover {
+  color: var(--gold-1);
+  border-color: var(--gold-2);
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.1), 0 0 12px rgba(216,178,87,0.4);
+}
 
-/* ---- server identity badge (top-left, beside Leave) ---- */
-.realm-badge {
+.crown-badge {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.55rem;
-  background: rgba(0,0,0,0.6);
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.35rem 0.85rem;
+  background:
+    radial-gradient(ellipse 120% 100% at 50% 0%, rgba(91,140,255,0.10), transparent 60%),
+    linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
   border: 1px solid var(--gold-deep);
-  padding: 0.3rem 0.7rem;
-  border-radius: 2px;
+  border-radius: 3px;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.06), 0 0 14px rgba(0,0,0,0.5);
 }
-.realm-badge .rb-label {
+.crown-badge .cb-glyph {
+  color: var(--gold-1, #f6e4a3);
+  filter: drop-shadow(0 0 6px rgba(246,228,163,0.4));
+  display: inline-flex;
+}
+.crown-badge .cb-stack {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.05;
+  min-width: 0;
+}
+.crown-badge .cb-label {
   font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.62rem;
-  letter-spacing: 0.22em;
+  font-size: 0.55rem;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--ink-mute);
 }
-.realm-badge .rb-name {
+.crown-badge .cb-name {
   font-family: var(--font-display, "Cinzel", serif);
   font-size: 0.95rem;
   letter-spacing: 0.1em;
   color: var(--gold-1, #f6e4a3);
+  text-shadow: 0 0 8px rgba(246,228,163,0.3);
 }
-.realm-badge .rb-mode {
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
+.crown-badge .cb-mode {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-soft);
   border-left: 1px solid var(--gold-deep);
-  padding-left: 0.55rem;
+  padding-left: 0.7rem;
+  margin-left: 0.2rem;
 }
 
-/* ---- presence (souls online) ---- */
-.realm-presence {
+.crown-presence {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  background: rgba(0,0,0,0.55);
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  background: linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
   border: 1px solid var(--gold-deep);
-  padding: 0.25rem 0.55rem;
-  border-radius: 2px;
+  border-radius: 3px;
   font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  color: var(--ink-soft);
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.05), 0 0 10px rgba(0,0,0,0.5);
 }
-.realm-presence .presence-glyph { color: var(--gold-1, #f6e4a3); }
-.realm-presence .presence-count { color: var(--ink); font-weight: 600; }
+.crown-presence .cp-glyph {
+  color: var(--gold-1, #f6e4a3);
+  filter: drop-shadow(0 0 4px rgba(246,228,163,0.4));
+  font-size: 0.95rem;
+}
+.crown-presence .cp-num {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+.crown-presence .cp-label {
+  color: var(--ink-mute);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
 
-/* ---- mini-map (top-right corner) ---- */
-.realm-minimap {
-  position: absolute;
-  top: 0.7rem;
-  right: 0.7rem;
-  width: 180px;
-  background: rgba(0,0,0,0.65);
-  border: 1px solid var(--gold-deep);
-  border-radius: 2px;
-  padding: 6px;
-  z-index: 4;
-  box-shadow: 0 0 14px rgba(0,0,0,0.5);
+.crown-edit-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  background: linear-gradient(180deg, #f6e4a3, #caa24a);
+  color: #1d150a;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  border: 1px solid #7a5a1f;
+  border-radius: 3px;
+  box-shadow: 0 0 14px rgba(246,228,163,0.45), inset 0 0 0 1px rgba(255,255,255,0.18);
+  animation: edit-pulse 2.4s ease-in-out infinite;
 }
-.realm-minimap canvas {
+.crown-edit-flag .cef-glyph { font-size: 0.95rem; }
+.crown-edit-flag[hidden] { display: none; }
+@keyframes edit-pulse {
+  0%,100% { box-shadow: 0 0 14px rgba(246,228,163,0.45), inset 0 0 0 1px rgba(255,255,255,0.18); }
+  50%     { box-shadow: 0 0 22px rgba(246,228,163,0.7),  inset 0 0 0 1px rgba(255,255,255,0.28); }
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ TOP-RIGHT — Atlas (minimap)                               ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hud-atlas {
+  position: absolute;
+  top: 14px;
+  /* Sit just to the LEFT of the right rail so they never overlap. */
+  right: calc(var(--rail-w) + 28px);
+  width: 220px;
+  z-index: 5;
+}
+.atlas-frame {
+  position: relative;
+  padding: 6px;
+  background:
+    radial-gradient(ellipse 100% 80% at 50% 0%, rgba(91,140,255,0.10), transparent 60%),
+    linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
+  border: 1px solid var(--gold-deep);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.08),
+    inset 0 0 12px rgba(0,0,0,0.55),
+    0 0 18px rgba(0,0,0,0.55),
+    0 0 24px rgba(91,140,255,0.06);
+}
+.atlas-frame canvas {
   display: block;
   width: 100%;
   height: auto;
   background: #0c0e14;
-  border: 1px solid rgba(217,166,74,0.25);
+  border: 1px solid rgba(217,166,74,0.4);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  border-radius: 2px;
 }
-.realm-minimap .minimap-foot {
+.atlas-expand {
+  position: absolute;
+  right: 8px; bottom: 8px;
+  width: 26px; height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid var(--gold-deep);
+  color: var(--gold-1, #f6e4a3);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+.atlas-expand:hover { border-color: var(--gold-2); box-shadow: 0 0 10px rgba(246,228,163,0.45); }
+.atlas-foot {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-top: 4px;
-  padding: 0 2px;
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.realm-minimap .mm-coords { color: var(--ink-soft); font-family: monospace; letter-spacing: 0.06em; }
-
-/* ---- stat panel (bottom-left, above chat) ---- */
-.realm-stats {
-  position: absolute;
-  left: 1rem;
-  /* Stacks above the chat rail. Chat is bottom: 1rem and (when expanded)
-     adds ~30vh log + ~5rem of header/body padding, so the stat panel
-     floats just above the input row with a small breathing gap. */
-  bottom: calc(30vh + 6rem);
-  width: min(320px, 50vw);
-  background: linear-gradient(180deg, rgba(16,12,20,0.92), rgba(7,6,10,0.92));
+  margin-top: 7px;
+  padding: 4px 8px;
+  background: linear-gradient(180deg, rgba(28,20,32,0.85), rgba(10,8,14,0.85));
   border: 1px solid var(--gold-deep);
   border-radius: 2px;
-  padding: 0.55rem 0.7rem;
-  z-index: 3;
-  box-shadow: 0 0 16px rgba(0,0,0,0.55);
-}
-.stats-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--gold-deep);
-  margin-bottom: 0.5rem;
-}
-.stats-name-row { display: inline-flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
-.stats-name {
   font-family: var(--font-display, "Cinzel", serif);
-  font-size: 1rem;
-  letter-spacing: 0.06em;
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   color: var(--gold-1, #f6e4a3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-shadow: 0 0 6px rgba(246,228,163,0.25);
 }
-.stats-race {
-  font-size: 0.7rem;
+.atlas-foot .af-coords {
+  color: #f6e4a3;
+  font-family: monospace;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ RIGHT RAIL — Codex (Settings, Map, Char, Inv, Spells…)    ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hud-codex {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: var(--rail-w);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 7px;
+  background: linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.06), 0 0 14px rgba(0,0,0,0.55);
+  z-index: 5;
+}
+.codex-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 46px;
+  background:
+    linear-gradient(180deg, rgba(46,30,52,0.55), rgba(16,12,20,0.85));
+  border: 1px solid var(--gold-deep);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 140ms ease, border-color 140ms ease, transform 80ms ease, box-shadow 140ms ease;
+}
+.codex-btn .cb-icon { color: inherit; }
+.codex-btn .cb-key {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.55rem;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+}
+.codex-btn:hover {
+  color: var(--gold-1);
+  border-color: var(--gold-2);
+  box-shadow: inset 0 0 8px rgba(246,228,163,0.18), 0 0 12px rgba(216,178,87,0.35);
+}
+.codex-btn:active { transform: scale(0.97); }
+.codex-btn.is-active {
+  color: var(--gold-1);
+  border-color: var(--gold-1);
+  box-shadow: inset 0 0 12px rgba(246,228,163,0.25), 0 0 14px rgba(246,228,163,0.45);
+}
+.codex-divider {
+  height: 1px;
+  margin: 2px 4px;
+  background: linear-gradient(90deg, transparent, var(--gold-3), transparent);
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ LEFT — Voices (chat)                                      ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hud-chat {
+  position: absolute;
+  left: 14px;
+  /* Sit above the bottom HUD with breathing room. */
+  bottom: calc(var(--hud-h) + 28px);
+  width: min(380px, 32vw);
+  max-height: 38vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(180deg, rgba(28,20,32,0.94), rgba(7,6,12,0.94));
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.06),
+    inset 0 0 24px rgba(0,0,0,0.55),
+    0 0 22px rgba(0,0,0,0.55);
+  z-index: 4;
+  overflow: hidden;
+}
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.75rem;
+  background:
+    linear-gradient(180deg, rgba(246,228,163,0.08), rgba(246,228,163,0)),
+    rgba(0,0,0,0.4);
+  border-bottom: 1px solid var(--gold-deep);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+.chat-head:hover { background: rgba(246,228,163,0.12); }
+.chat-glyph {
+  color: var(--gold-1, #f6e4a3);
+  font-size: 0.95rem;
+  text-shadow: 0 0 6px rgba(246,228,163,0.4);
+}
+.chat-title {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold-1, #f6e4a3);
+}
+.chat-hint {
+  margin-left: auto;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.6rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-mute);
   border: 1px solid var(--gold-deep);
-  padding: 0.05rem 0.4rem;
+  padding: 0.1rem 0.4rem;
   border-radius: 2px;
 }
-.stats-race.is-admin {
+.chat-collapse {
+  font-size: 0.85rem;
+  color: var(--gold-1);
+  width: 1rem;
+  text-align: center;
+}
+.hud-chat.is-collapsed .chat-head { border-bottom: none; }
+.chat-body[hidden] { display: none; }
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem 0.55rem;
+}
+.chat-log {
+  max-height: 26vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(217,166,74,0.35);
+  border-radius: 2px;
+  font-family: var(--font-body, "Cormorant Garamond", serif);
+  font-size: 0.98rem;
+  color: var(--ink-soft);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-3) transparent;
+}
+.chat-log:empty { display: none; }
+.chat-log .chat-line { line-height: 1.35; }
+.chat-log .chat-line.is-cmd  { color: var(--gold-1); font-style: italic; }
+.chat-log .chat-line.is-err  { color: var(--danger); }
+.chat-log .chat-line.is-good { color: var(--good); }
+.chat-log .chat-line.is-self { color: #fff7d8; }
+.chat-log .chat-line .who { color: var(--ink-mute); margin-right: 0.4rem; }
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cir-glyph {
+  padding: 0 0.55rem;
+  color: var(--gold-2);
+  font-size: 1rem;
+  border-right: 1px solid var(--gold-deep);
+  background: rgba(0,0,0,0.45);
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+}
+.chat-input-row input {
+  flex: 1;
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+.chat-input-row:focus-within { border-color: var(--gold-2); box-shadow: 0 0 8px rgba(216,178,87,0.4); }
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ BOTTOM — Output meter (above the HUD plate)               ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hud-output {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--hud-h) + 12px);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.85rem;
+  background: linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.06), 0 0 14px rgba(0,0,0,0.55);
+  z-index: 5;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.62rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.hud-output.is-charging {
+  border-color: var(--gold-2, #d8b257);
+  box-shadow: 0 0 18px rgba(216,178,87,0.5);
+  color: var(--gold-1);
+}
+.ho-track {
+  position: relative;
+  width: 220px;
+  height: 10px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid var(--gold-deep);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.ho-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #8ec1ff 0%, #b070ff 60%, #f6e4a3 100%);
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.4);
+  transition: width 120ms ease-out;
+}
+.ho-fill::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0));
+  pointer-events: none;
+}
+.ho-num {
+  color: var(--ink);
+  font-family: monospace;
+  letter-spacing: 0.06em;
+  min-width: 3.2em;
+  text-align: right;
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ BOTTOM-CENTER — DOTA-2-style HUD plate                    ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hud-plate {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 10px 14px;
+  height: var(--hud-h);
+  /* Cap to viewport so the plate never overflows on small screens. */
+  max-width: calc(100vw - 28px);
+  background:
+    /* faint tome-paper texture */
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(255,220,160,0.025) 0 2px, transparent 2px 7px),
+    radial-gradient(ellipse 70% 100% at 50% 0%, rgba(91,140,255,0.08), transparent 60%),
+    linear-gradient(180deg, #1c1410 0%, #0d0a08 100%);
+  border: 1px solid var(--gold-deep);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.08),
+    inset 0 0 0 4px rgba(13,10,8,0.95),
+    inset 0 0 0 5px rgba(216,178,87,0.55),
+    inset 0 0 36px rgba(0,0,0,0.7),
+    0 -10px 28px rgba(0,0,0,0.5),
+    0 0 22px rgba(91,140,255,0.04);
+  z-index: 4;
+}
+/* Decorative gold trim ribbons on the left/right edges of the plate. */
+.plate-trim {
+  position: absolute;
+  top: 12px; bottom: 12px;
+  width: 14px;
+  background:
+    linear-gradient(180deg, transparent 0%, var(--gold-3) 12%, var(--gold-2) 50%, var(--gold-3) 88%, transparent 100%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.plate-trim.trim-l { left: -7px;  border-radius: 1px; box-shadow: 0 0 8px rgba(216,178,87,0.45); }
+.plate-trim.trim-r { right: -7px; border-radius: 1px; box-shadow: 0 0 8px rgba(216,178,87,0.45); }
+
+/* ── plate · portrait wing ────────────────────────────────── */
+.plate-portrait {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 12px;
+  border-right: 1px solid var(--gold-deep);
+}
+.pp-frame {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  background:
+    radial-gradient(ellipse 80% 80% at 50% 30%, rgba(91,140,255,0.18), transparent 60%),
+    linear-gradient(180deg, #1c1410, #0a0806);
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.12),
+    inset 0 0 18px rgba(0,0,0,0.7),
+    0 0 14px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.pp-frame canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.pp-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-mute);
+  font-family: var(--font-rune, "MedievalSharp", serif);
+  font-size: 1.6rem;
+  pointer-events: none;
+}
+.pp-level {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 28px;
+  padding: 0.1rem 0.5rem;
+  background: linear-gradient(180deg, #f6e4a3, #caa24a);
+  color: #1d150a;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  border: 1px solid #7a5a1f;
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(246,228,163,0.5), inset 0 0 0 1px rgba(255,255,255,0.18);
+  text-align: center;
+  line-height: 1;
+}
+.pp-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.pp-name {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: var(--gold-1, #f6e4a3);
+  text-shadow: 0 0 10px rgba(246,228,163,0.3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 9rem;
+}
+.pp-race {
+  display: inline-flex;
+  align-self: flex-start;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.65rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border: 1px solid var(--gold-deep);
+  padding: 0.15rem 0.55rem;
+  border-radius: 2px;
+}
+.pp-race.is-admin {
   color: #1d150a;
   background: linear-gradient(180deg, #f6e4a3, #caa24a);
   border-color: #7a5a1f;
 }
-.stats-level {
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.78rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-  white-space: nowrap;
+
+/* ── plate · bars wing ────────────────────────────────────── */
+.plate-bars {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+  padding-right: 12px;
+  border-right: 1px solid var(--gold-deep);
 }
-.stats-level b { color: var(--gold-1, #f6e4a3); font-weight: 600; }
-.stats-bars { display: flex; flex-direction: column; gap: 0.3rem; }
 .vbar {
   display: grid;
-  grid-template-columns: 1.6rem 1fr auto;
+  grid-template-columns: 1.5rem 1fr auto;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   font-family: monospace;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: var(--ink-soft);
 }
-.vbar-label {
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
-  color: var(--ink-mute);
+.vbar-icon {
+  font-size: 1rem;
+  color: var(--gold-1, #f6e4a3);
+  text-align: center;
+  text-shadow: 0 0 6px rgba(246,228,163,0.45);
 }
+.bar-hp .vbar-icon { color: #ff8a7a; text-shadow: 0 0 6px rgba(255,138,122,0.55); }
+.bar-mp .vbar-icon { color: #8ec1ff; text-shadow: 0 0 6px rgba(142,193,255,0.55); }
+.bar-st .vbar-icon { color: #ffe085; text-shadow: 0 0 6px rgba(255,224,133,0.55); }
 .vbar-track {
-  height: 12px;
-  background: rgba(0,0,0,0.55);
+  position: relative;
+  height: 16px;
+  background: rgba(0,0,0,0.6);
   border: 1px solid var(--gold-deep);
   border-radius: 1px;
   overflow: hidden;
-  position: relative;
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.55);
 }
 .vbar-fill {
+  position: relative;
   height: 100%;
   width: 100%;
-  transition: width 0.25s ease-out;
+  transition: width 0.3s ease-out;
   background: linear-gradient(180deg, #fff 0%, #ccc 100%);
   box-shadow: inset 0 0 6px rgba(0,0,0,0.35);
 }
-.bar-hp .vbar-fill { background: linear-gradient(180deg, #ff8a7a, #b13a2a); }
-.bar-mp .vbar-fill { background: linear-gradient(180deg, #8ec1ff, #2c5fb8); }
-.bar-st .vbar-fill { background: linear-gradient(180deg, #ffe085, #b88a1a); }
-.vbar-num { font-size: 0.72rem; color: var(--ink-soft); white-space: nowrap; }
-.stats-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.4rem;
-  margin-top: 0.55rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--gold-deep);
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.65rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.stats-foot b { color: var(--ink-soft); font-weight: 600; }
-
-/* ---- output meter (above hotbar) ---- */
-.realm-output {
+.vbar-fill::after {
+  content: "";
   position: absolute;
-  left: 50%;
-  bottom: calc(1rem + 64px + 0.6rem);
-  transform: translateX(-50%);
-  display: inline-flex;
+  top: 0; left: 0; right: 0;
+  height: 45%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0));
+  pointer-events: none;
+}
+.bar-hp .vbar-fill { background: linear-gradient(180deg, #ff8a7a 0%, #c0392b 60%, #7a1f15 100%); }
+.bar-mp .vbar-fill { background: linear-gradient(180deg, #cfe2ff 0%, #5b8cff 50%, #2c4faa 100%); }
+.bar-st .vbar-fill { background: linear-gradient(180deg, #ffe085 0%, #d8a73a 60%, #7a5a1f 100%); }
+.vbar-num { font-size: 0.78rem; color: var(--ink); white-space: nowrap; min-width: 4.8em; text-align: right; }
+
+/* ── plate · hotbar (center) ─────────────────────────────── */
+.plate-hotbar {
+  display: flex;
   align-items: center;
-  gap: 0.55rem;
-  background: rgba(0,0,0,0.6);
-  border: 1px solid var(--gold-deep);
-  border-radius: 2px;
-  padding: 0.3rem 0.7rem;
-  z-index: 3;
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.7rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.out-track {
-  width: 160px;
-  height: 8px;
-  background: rgba(0,0,0,0.55);
-  border: 1px solid var(--gold-deep);
-  border-radius: 1px;
-  overflow: hidden;
-}
-.out-fill {
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #8ec1ff, #caa6ff);
-  box-shadow: inset 0 0 6px rgba(0,0,0,0.35);
-}
-.out-num { color: var(--ink); font-family: monospace; letter-spacing: 0.06em; }
-
-/* ---- hotbar (bottom-center) ---- */
-.realm-hotbar {
-  position: absolute;
-  left: 50%;
-  bottom: 1rem;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(0,0,0,0.55);
+  gap: 5px;
+  padding: 6px 8px;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.35)),
+    radial-gradient(ellipse 80% 100% at 50% 0%, rgba(176,112,255,0.08), transparent 70%);
   border: 1px solid var(--gold-deep);
   border-radius: 3px;
-  z-index: 3;
-  box-shadow: 0 0 18px rgba(0,0,0,0.55);
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.06), inset 0 0 14px rgba(0,0,0,0.6);
 }
 .hb-slot {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(20,16,24,0.95);
+  background:
+    linear-gradient(180deg, rgba(46,30,52,0.7), rgba(16,12,20,0.95));
   border: 1px solid var(--gold-deep);
   border-radius: 2px;
   color: var(--ink-soft);
   font-family: var(--font-display, "Cinzel", serif);
   cursor: default;
   padding: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 80ms ease;
 }
 .hb-slot .hb-key {
   position: absolute;
@@ -326,9 +783,10 @@
   letter-spacing: 0.05em;
 }
 .hb-slot .hb-icon {
-  font-size: 1.6rem;
+  font-size: 1.45rem;
   color: var(--gold-1, #f6e4a3);
   line-height: 1;
+  text-shadow: 0 0 8px rgba(246,228,163,0.4);
 }
 .hb-slot .hb-name {
   position: absolute;
@@ -337,7 +795,7 @@
   right: 0;
   text-align: center;
   font-size: 0.55rem;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-mute);
   white-space: nowrap;
@@ -347,247 +805,105 @@
 }
 .hb-slot.is-active {
   border-color: var(--gold-2, #d8b257);
-  box-shadow: inset 0 0 8px rgba(246,228,163,0.18), 0 0 10px rgba(246,228,163,0.25);
+  box-shadow: inset 0 0 10px rgba(246,228,163,0.22), 0 0 14px rgba(246,228,163,0.35);
 }
 .hb-slot.is-locked {
-  background: rgba(10,8,14,0.8);
+  background: linear-gradient(180deg, rgba(10,8,14,0.85), rgba(6,5,10,0.95));
   color: var(--ink-mute);
   cursor: not-allowed;
 }
 .hb-slot.is-locked .hb-lock {
-  font-size: 1.4rem;
-  color: rgba(255,255,255,0.12);
-}
-
-/* ---- chat rail ----
-   The chat is a folded sheet of parchment. The header bar is always
-   visible (and clickable to collapse the body). The body holds the log
-   and the speak input. Chat history is preserved while collapsed. */
-.realm-chat {
-  position: absolute;
-  left: 1rem;
-  bottom: 1rem;
-  width: min(440px, 60vw);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  z-index: 2;
-  background:
-    linear-gradient(180deg, rgba(20,16,28,0.92), rgba(7,6,12,0.92));
-  border: 1px solid var(--gold-deep);
-  border-radius: 3px;
-  box-shadow: 0 0 22px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(246,228,163,0.05);
-  overflow: hidden;
-}
-.chat-head {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.7rem;
-  background:
-    linear-gradient(180deg, rgba(246,228,163,0.06), rgba(246,228,163,0.0)),
-    rgba(0,0,0,0.4);
-  border-bottom: 1px solid var(--gold-deep);
-  cursor: pointer;
-  font-family: inherit;
-  color: inherit;
-  text-align: left;
-  width: 100%;
-}
-.chat-head:hover { background: rgba(246,228,163,0.08); }
-.chat-title {
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.78rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold-1, #f6e4a3);
-}
-.chat-hint {
-  margin-left: auto;
-  font-family: var(--font-display, "Cinzel", serif);
-  font-size: 0.62rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.chat-collapse {
-  font-size: 0.85rem;
-  color: var(--gold-1);
-  width: 1rem;
-  text-align: center;
-}
-.realm-chat.is-collapsed .chat-head { border-bottom: none; }
-.chat-body[hidden] { display: none; }
-.chat-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.4rem 0.5rem 0.5rem;
-}
-.chat-log {
-  max-height: 30vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.35rem 0.55rem;
-  background: rgba(0,0,0,0.35);
-  border: 1px solid rgba(217,166,74,0.35);
-  border-radius: 2px;
-  font-size: 0.95rem;
-  color: var(--ink-soft);
-  scrollbar-width: thin;
-  scrollbar-color: var(--gold-3) transparent;
-}
-.chat-log:empty { display: none; }
-.chat-log .chat-line {
-  line-height: 1.3;
-}
-.chat-log .chat-line.is-cmd  { color: var(--gold-1); font-style: italic; }
-.chat-log .chat-line.is-err  { color: var(--danger); }
-.chat-log .chat-line.is-good { color: var(--good); }
-.chat-log .chat-line.is-self { color: #fff7d8; }
-.chat-log .chat-line .who {
-  color: var(--ink-mute);
-  margin-right: 0.4rem;
-}
-.chat-input-row {
-  display: flex;
-}
-.chat-input-row input {
-  flex: 1;
-  background: rgba(0,0,0,0.55);
-  color: var(--ink);
-  border: 1px solid var(--gold-deep);
-  padding: 0.55rem 0.7rem;
-  font-family: inherit;
-  font-size: 1rem;
-  border-radius: 2px;
-  outline: none;
-}
-.chat-input-row input:focus {
-  border-color: var(--gold-2);
-  box-shadow: 0 0 8px rgba(216,178,87,0.35);
-}
-
-/* ---- build-mode polish ----
-   When the editor is open we hide the player-facing HUD widgets so the
-   admin sees the world cleanly. Chat + the editor flag stay. */
-.realm.is-editing .realm-stats,
-.realm.is-editing .realm-hotbar,
-.realm.is-editing .realm-output,
-.realm.is-editing .realm-presence,
-.realm.is-editing .realm-minimap {
-  display: none !important;
-}
-.realm.is-editing .realm-badge {
-  /* Fade the server badge a touch so the editor flag dominates the bar. */
-  opacity: 0.7;
-}
-
-/* ---- ornate corner accents on stat panel + minimap ----
-   Tiny gold L-shapes in each corner. Adds the "real game" feel without
-   needing any extra DOM. */
-.realm-stats, .realm-minimap {
-  position: relative;
-}
-.realm-stats::before, .realm-stats::after,
-.realm-minimap::before, .realm-minimap::after {
-  content: "";
-  position: absolute;
-  width: 12px; height: 12px;
-  border: 1px solid var(--gold-2, #d8b257);
-  pointer-events: none;
-  opacity: 0.85;
-}
-.realm-stats::before, .realm-minimap::before {
-  top: -1px; left: -1px;
-  border-right: none; border-bottom: none;
-}
-.realm-stats::after, .realm-minimap::after {
-  bottom: -1px; right: -1px;
-  border-left: none; border-top: none;
-}
-
-/* Low-HP pulse — the bar glows warm-red when HP < 30%. */
-.bar-hp.is-low .vbar-fill {
-  animation: hp-pulse 1.2s ease-in-out infinite;
-}
-@keyframes hp-pulse {
-  0%, 100% { box-shadow: inset 0 0 6px rgba(0,0,0,0.35), 0 0 0 rgba(255,90,70,0); }
-  50%      { box-shadow: inset 0 0 6px rgba(0,0,0,0.35), 0 0 10px rgba(255,90,70,0.7); }
-}
-
-/* Output meter — slightly more dramatic when not at 100%. */
-.realm-output { transition: border-color 0.25s ease; }
-.realm-output.is-charging { border-color: var(--gold-2, #d8b257); box-shadow: 0 0 14px rgba(216,178,87,0.35); }
-
-/* Hotbar slot 1 (the racial weapon) gets a tasteful permanent ring so it
-   reads as the active slot. */
-.hb-slot[data-slot="1"]:not(.is-locked) {
-  border-color: var(--gold-2, #d8b257);
-  box-shadow: inset 0 0 10px rgba(246,228,163,0.18), 0 0 12px rgba(246,228,163,0.25);
+  font-size: 1.2rem;
+  color: rgba(255,255,255,0.1);
+  text-shadow: none;
 }
 .hb-slot:not(.is-locked):hover {
   border-color: var(--gold-1, #f6e4a3);
-  box-shadow: 0 0 8px rgba(246,228,163,0.35);
+  box-shadow: 0 0 12px rgba(246,228,163,0.45), inset 0 0 8px rgba(246,228,163,0.2);
+  transform: translateY(-1px);
+}
+.hb-slot:not(.is-locked):active { transform: translateY(0); }
+
+/* ── plate · stats wing (right) ──────────────────────────── */
+.plate-stats {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0.35rem 0.9rem;
+  align-content: center;
+  padding-left: 12px;
+  border-left: 1px solid var(--gold-deep);
+}
+.ps-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-family: var(--font-display, "Cinzel", serif);
+}
+.ps-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.ps-num {
+  font-family: monospace;
+  font-size: 0.95rem;
+  color: var(--gold-1, #f6e4a3);
+  text-shadow: 0 0 6px rgba(246,228,163,0.3);
 }
 
-/* Stat panel: lift the avatar name with a faint glow, give the bars a
-   subtle inner-shine highlight. */
-.stats-name {
-  text-shadow: 0 0 8px rgba(246,228,163,0.25);
-}
-.vbar-fill::after {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 40%;
-  background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0));
-  pointer-events: none;
-}
-.vbar-track { position: relative; }
-
-/* Server badge: subtle gold ornament on the divider between name + mode. */
-.realm-badge {
-  background:
-    linear-gradient(180deg, rgba(246,228,163,0.06), rgba(246,228,163,0)),
-    rgba(0,0,0,0.6);
-  box-shadow: 0 0 12px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(246,228,163,0.05);
+/* Low-HP pulse — bar glows warm-red when HP < 30%. */
+.bar-hp.is-low .vbar-fill { animation: hp-pulse 1.2s ease-in-out infinite; }
+@keyframes hp-pulse {
+  0%,100% { box-shadow: inset 0 0 6px rgba(0,0,0,0.35), 0 0 0 rgba(255,90,70,0); }
+  50%     { box-shadow: inset 0 0 6px rgba(0,0,0,0.35), 0 0 12px rgba(255,90,70,0.75); }
 }
 
-/* ---- editor palette overlay ---- */
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ BUILD MODE — admin-only HUD shrouding                     ║
+   ╚═══════════════════════════════════════════════════════════╝
+   Hide the player-facing chrome so the world reads cleanly.
+   Chat + Codex (so admin can hit Settings) + Crown bar stay. */
+.realm.is-editing .hud-plate,
+.realm.is-editing .hud-output,
+.realm.is-editing .crown-presence,
+.realm.is-editing .hud-atlas {
+  display: none !important;
+}
+.realm.is-editing .crown-badge { opacity: 0.75; }
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ EDITOR PALETTE                                            ║
+   ╚═══════════════════════════════════════════════════════════╝ */
 .realm-palette[hidden] { display: none; }
 .realm-palette {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  /* Screen-contained. Width is capped so the world stays visible to the
-     left, and the inner palette body is the only thing that scrolls — the
-     page never scrolls because the realm is position:fixed. */
-  width: min(420px, 38vw);
+  width: min(440px, 38vw);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, rgba(16,12,20,0.96), rgba(7,6,10,0.96));
+  background: linear-gradient(180deg, rgba(16,12,20,0.97), rgba(7,6,10,0.97));
   border-left: 1px solid var(--gold-deep);
-  box-shadow: -8px 0 24px rgba(0,0,0,0.55);
-  z-index: 3;
-  /* The palette itself never scrolls — only its body does. */
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.06),
+    -8px 0 24px rgba(0,0,0,0.55);
+  z-index: 6;
   overflow: hidden;
 }
 .palette-head {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.7rem 0.9rem;
+  padding: 0.75rem 0.95rem;
   border-bottom: 1px solid var(--gold-deep);
   flex: 0 0 auto;
 }
 .palette-title {
   font-family: var(--font-display, "Cinzel", serif);
   font-size: 0.85rem;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--gold-1);
 }
@@ -619,7 +935,7 @@
   flex-wrap: wrap;
   gap: 0.6rem 0.9rem;
   align-items: end;
-  padding: 0.6rem 0.9rem;
+  padding: 0.65rem 0.95rem;
   border-bottom: 1px solid var(--gold-deep);
   flex: 0 0 auto;
 }
@@ -637,7 +953,7 @@
   background: rgba(0,0,0,0.45);
   color: var(--ink-soft);
   border: 1px solid var(--gold-deep);
-  padding: 0.25rem 0.4rem;
+  padding: 0.3rem 0.4rem;
   font-family: inherit;
   font-size: 0.9rem;
   border-radius: 2px;
@@ -652,7 +968,7 @@
   font-size: 0.7rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  padding: 0.4rem 0.7rem;
+  padding: 0.45rem 0.75rem;
   cursor: pointer;
   border-radius: 2px;
 }
@@ -662,23 +978,17 @@
 
 .palette-selected {
   margin: 0;
-  padding: 0.4rem 0.9rem;
-  font-size: 0.9rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.95rem;
   color: var(--ink-mute);
   border-bottom: 1px solid var(--gold-deep);
   flex: 0 0 auto;
 }
-.palette-selected span {
-  font-family: monospace;
-  color: var(--ink-soft);
-}
-
-/* The ONLY scrollable region inside the palette. The page itself never
-   scrolls; the user only ever scrolls within this body to find a tile. */
+.palette-selected span { font-family: monospace; color: var(--ink-soft); }
 .palette-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 0.6rem 0.9rem;
+  padding: 0.7rem 0.95rem;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
@@ -688,7 +998,7 @@
 .palette-tileset {
   border: 1px solid var(--gold-deep);
   border-radius: 2px;
-  padding: 0.5rem 0.6rem;
+  padding: 0.55rem 0.7rem;
   background: rgba(0,0,0,0.3);
 }
 .palette-tileset .ts-head {
@@ -696,7 +1006,7 @@
   flex-wrap: wrap;
   gap: 0.4rem 0.8rem;
   align-items: baseline;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.45rem;
 }
 .palette-tileset .ts-head .name {
   font-family: var(--font-display, "Cinzel", serif);
@@ -705,10 +1015,7 @@
   text-transform: uppercase;
   color: var(--ink-soft);
 }
-.palette-tileset .ts-head .meta {
-  font-size: 0.8rem;
-  color: var(--ink-mute);
-}
+.palette-tileset .ts-head .meta { font-size: 0.8rem; color: var(--ink-mute); }
 .palette-stage {
   position: relative;
   display: inline-block;
@@ -720,11 +1027,7 @@
   max-width: 100%;
   overflow: auto;
 }
-.palette-stage canvas {
-  display: block;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
+.palette-stage canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
 .palette-stage .selection {
   position: absolute;
   border: 2px solid #ffe9a8;
@@ -732,19 +1035,405 @@
   pointer-events: none;
   display: none;
 }
-
-.palette-empty {
-  color: var(--ink-mute);
-  font-size: 0.95rem;
-}
+.palette-empty { color: var(--ink-mute); font-size: 0.95rem; }
 .palette-empty a { color: var(--gold-1); }
-
 .palette-hint {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0.45rem 0.9rem;
+  padding: 0.5rem 0.95rem;
   border-top: 1px solid var(--gold-deep);
   font-size: 0.78rem;
   color: var(--ink-mute);
   background: rgba(0,0,0,0.3);
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ MODALS — Atlas / Settings / Vessel / Satchel / Spells    ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.modal-veil[hidden], .modal[hidden] { display: none; }
+.modal-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, rgba(8,6,14,0.65) 0%, rgba(2,1,4,0.9) 80%);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 60;
+  animation: veil-in 220ms ease-out;
+}
+@keyframes veil-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 65;
+  pointer-events: none;
+}
+.modal > * { pointer-events: auto; }
+.modal-frame {
+  position: relative;
+  width: min(820px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    /* parchment */
+    radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%),
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(255,220,160,0.02) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, var(--parchment-1, #271a11) 0%, var(--parchment-0, #1c1410) 60%, #150e09 100%);
+  color: var(--ink);
+  border-radius: 5px;
+  box-shadow:
+    inset 0 0 0 1px var(--gold-3, #8a6a25),
+    inset 0 0 0 4px var(--parchment-0, #1c1410),
+    inset 0 0 0 5px var(--gold-2, #d8b257),
+    inset 0 0 36px rgba(0,0,0,0.7),
+    0 30px 70px rgba(0,0,0,0.7),
+    0 0 0 1px rgba(0,0,0,0.6);
+  animation: modal-in 240ms cubic-bezier(.2,.9,.3,1.1);
+}
+.modal-frame--narrow { width: min(560px, 92vw); }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 1rem 1.4rem 0.85rem;
+  border-bottom: 1px solid var(--gold-deep);
+  background:
+    linear-gradient(180deg, rgba(246,228,163,0.06), rgba(246,228,163,0));
+}
+.modal-glyph {
+  color: var(--gold-1);
+  font-size: 1.1rem;
+  text-shadow: 0 0 8px rgba(246,228,163,0.45);
+}
+.modal-title {
+  margin: 0;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-1, #f6e4a3);
+  text-shadow: 0 0 10px rgba(246,228,163,0.25);
+}
+.modal-sub {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-left: 0.6rem;
+  border-left: 1px solid var(--gold-deep);
+  padding-left: 0.7rem;
+}
+.modal-x {
+  margin-left: auto;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--gold-deep);
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.modal-x:hover { color: var(--gold-1); border-color: var(--gold-2); }
+.modal-body {
+  padding: 1.1rem 1.4rem 1.3rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-3) transparent;
+}
+.modal-flavor {
+  margin-top: 1rem;
+  font-style: italic;
+  color: var(--ink-mute);
+}
+
+/* ── Atlas modal ───────────────────────────────────────────── */
+.modal-body--map {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 1.1rem;
+  align-items: start;
+}
+.map-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.map-stage canvas {
+  width: 100%;
+  height: auto;
+  background: #0c0e14;
+  border: 1px solid var(--gold-deep);
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.06), inset 0 0 22px rgba(0,0,0,0.65);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 2px;
+}
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.map-legend .leg { display: inline-block; width: 10px; height: 10px; margin-right: 0.4rem; vertical-align: middle; border-radius: 1px; }
+.leg-self   { background: #fff7d8; box-shadow: 0 0 6px rgba(246,228,163,0.7); }
+.leg-soul   { background: #cfe4ff; }
+.leg-paint  { background: rgba(105, 145, 90, 0.7); }
+.leg-origin { background: transparent; border: 1px solid var(--gold-2); }
+.map-side { display: flex; flex-direction: column; gap: 0.7rem; }
+.map-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0.75rem;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+}
+.ms-l { font-family: var(--font-display, "Cinzel", serif); font-size: 0.6rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-mute); }
+.ms-v { font-family: monospace; color: var(--gold-1); font-size: 1rem; }
+.map-flavor { font-style: italic; color: var(--ink-mute); margin: 0; line-height: 1.4; }
+
+/* ── Settings modal ───────────────────────────────────────── */
+.settings-block {
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.9rem;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+}
+.sb-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed rgba(216,178,87,0.18);
+  font-family: var(--font-body, "Cormorant Garamond", serif);
+  font-size: 1rem;
+  color: var(--ink-soft);
+}
+.setting-row:last-child { border-bottom: 0; }
+.sr-label { display: inline-flex; gap: 0.4rem; color: var(--ink); }
+.setting-row input[type="range"] { flex: 0 0 200px; accent-color: var(--gold-2); }
+.setting-row input[type="checkbox"] { accent-color: var(--gold-2); transform: scale(1.2); }
+.settings-note { margin: 0.4rem 0 0; font-size: 0.85rem; font-style: italic; color: var(--ink-mute); }
+.settings-actions { display: flex; justify-content: flex-end; margin-top: 0.7rem; }
+.settings-actions .ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--gold-deep);
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 0.55rem 0.95rem;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.settings-actions .ghost.danger { color: var(--danger); border-color: rgba(255,138,122,0.45); }
+.settings-actions .ghost.danger:hover { color: #fff; background: rgba(255,138,122,0.2); }
+
+/* ── Vessel modal ─────────────────────────────────────────── */
+.modal-body--char {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 1.1rem;
+  align-items: start;
+}
+.char-portrait {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 80% at 50% 30%, rgba(91,140,255,0.18), transparent 60%),
+    linear-gradient(180deg, #1c1410, #0a0806);
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.1), inset 0 0 22px rgba(0,0,0,0.7);
+}
+.char-portrait canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.char-detail .char-name {
+  margin: 0 0 0.2rem;
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 1.4rem;
+  letter-spacing: 0.08em;
+  color: var(--gold-1);
+  text-shadow: 0 0 10px rgba(246,228,163,0.3);
+}
+.char-detail .char-sub {
+  margin: 0 0 0.9rem;
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 0.8rem;
+}
+.cg-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.45rem 0.65rem;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  font-family: var(--font-display, "Cinzel", serif);
+}
+.cg-stat dt {
+  margin: 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.cg-stat dd {
+  margin: 0;
+  font-family: monospace;
+  font-size: 1rem;
+  color: var(--gold-1);
+}
+
+/* ── Satchel modal ────────────────────────────────────────── */
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+.inv-grid .inv-cell {
+  aspect-ratio: 1 / 1;
+  background:
+    linear-gradient(180deg, rgba(28,20,32,0.7), rgba(10,8,14,0.95));
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+  position: relative;
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.55);
+}
+.inv-grid .inv-cell.is-locked::after {
+  content: "·";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: rgba(255,255,255,0.08);
+}
+
+/* ── Spellbook & quests ──────────────────────────────────── */
+.spell-list, .quest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sl-row, .ql-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.6rem 0.8rem;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--gold-deep);
+  border-radius: 2px;
+}
+.sl-row.sl-locked, .ql-row.ql-locked { opacity: 0.55; }
+.sl-glyph, .ql-mark { color: var(--gold-1); font-size: 1.05rem; width: 1.4rem; text-align: center; }
+.sl-text, .ql-text { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; min-width: 0; }
+.sl-text strong, .ql-text strong {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+.sl-text em, .ql-text em { font-style: italic; color: var(--ink-mute); font-size: 0.9rem; }
+.sl-key {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  color: var(--gold-1);
+  border: 1px solid var(--gold-deep);
+  padding: 0.15rem 0.5rem;
+  border-radius: 2px;
+}
+
+/* ── Help / Tome of Lore ─────────────────────────────────── */
+.help-list { list-style: none; margin: 0 0 0.8rem; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); }
+.help-list kbd {
+  display: inline-block;
+  margin: 0 0.15rem;
+  padding: 0.05rem 0.4rem;
+  background: linear-gradient(180deg, #2c1f15, #1a1208);
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  color: var(--gold-1);
+  font-family: monospace;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.6);
+}
+.help-list code {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--gold-deep);
+  padding: 0.05rem 0.35rem;
+  border-radius: 2px;
+  color: var(--gold-1);
+  font-family: monospace;
+  font-size: 0.92rem;
+}
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║ NARROW SCREENS — keep things readable                     ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+@media (max-width: 1100px) {
+  .hud-plate { min-width: 0; padding: 10px 12px; gap: 8px; }
+  .pp-frame { width: 84px; height: 84px; }
+  .pp-name { max-width: 8rem; font-size: 0.95rem; }
+  .plate-bars { flex: 0 0 200px; }
+  .hb-slot { width: 46px; height: 46px; }
+  .hb-slot .hb-icon { font-size: 1.4rem; }
+  .hud-chat { width: min(320px, 36vw); bottom: calc(var(--hud-h) + 16px); }
+  .hud-atlas { width: 180px; right: calc(var(--rail-w) + 22px); }
+  .modal-body--map { grid-template-columns: 1fr; }
+  .modal-body--char { grid-template-columns: 1fr; }
+  .char-portrait { width: 100%; max-width: 240px; height: 240px; margin: 0 auto; }
+}
+@media (max-width: 760px) {
+  :root, .realm { --rail-w: 52px; }
+  .hud-plate { display: none; }
+  .hud-output { display: none; }
+  .hud-atlas { display: none; }
+  .hud-chat { width: min(90vw, 420px); bottom: 14px; max-height: 50vh; }
+  .crown-badge .cb-mode, .crown-badge .cb-label { display: none; }
 }

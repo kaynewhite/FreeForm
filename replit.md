@@ -68,7 +68,15 @@ Sprite-slice and tilemap data live on disk under `data/`, not in Postgres, so ad
 - Admin sprite slicing pipeline (per-frame rects, fps, scale) + animated character-sheet portrait
 - Tileset uploader (TSX + image, /maps.html) and in-game live world painter (`/command we`)
 - **Realtime multiplayer slice** — `/ws/realm` WebSocket, 20 Hz authoritative tick, presence + shard-wide chat, server-authoritative movement (4.5 t/s walk, ×1.8 sprint), camera-follow render, position persisted across logout
-- **In-realm HUD** — Server identity badge (`Server 0 · Firstlight` with Architect/Player Mode subtitle), souls-online counter, top-right mini-map (160×160, ±80 tiles around self, race-tinted dots + faint paint occupancy + facing tick + glowing gold self-pip), bottom-left stat panel (vessel name + race badge + level + live HP/MP/Stamina bars + XP/Control/Resistance footer, ornate gold corner accents, low-HP pulse animation), bottom-center 10-slot hotbar with the racial weapon in slot 1 (Dagger / Club / Bow / Slingshot / Katana / Free Hand for the Architect) and locked spell slots 2–0, and a wheel-driven Output meter (1–100%, 5%/notch) just above the hotbar.
+- **In-realm HUD** — Majestic medieval-fantasy theme (gold double-bezel borders, parchment textures, Cinzel display, ornate corner flourishes). Five non-overlapping zones laid out around the canvas:
+  - **Crown bar** (top-left): `‹ Leave` button + Realm/Mode badge (`Server 0 · Firstlight` with Architect/Player Mode subtitle) + souls-online counter + edit-flag pill (visible only while a `/command we` editor mode is active).
+  - **Atlas** (top-right): 200×200 mini-map (±100 tiles, painted ground occupancy + race-tinted dots + facing tick + glowing self-pip), expand-to-fullscreen button, and a Pulse / coords foot strip below.
+  - **Codex right rail** (under the Atlas): Char (C), Inventory (I), Spellbook (K), Quests (J), Map (M), Help (H), Settings (⚙) buttons. Each opens a corresponding modal; keys also work as global shortcuts when not typing.
+  - **Voices chat** (mid-left): collapsible chat panel with header fold and `T to speak` input.
+  - **HUD plate** (bottom-center, DOTA-2 style): portrait+identity wing | HP/MP/ST bars + numeric readouts | 10-slot hotbar (racial weapon in slot 1, locked spell slots 2–0) | XP / Control / Resistance / Cast-speed stats wing. Caps to viewport so it never overflows on small screens.
+  - **Channeled Output meter** (centered above the plate, wheel-driven 1–100%, 5%/notch).
+  - **Modals**: Map (zoom-to-canvas painted minimap of ±160 tiles, soul list, position readout), Settings (zoom slider + audio sliders + leave-realm button), Vessel (mirrors the character sheet — portrait, race, level, bars, stats, weapon), Inventory (24-cell parchment grid + equip slots + carried text + hint), Spellbook (Mana Bolt placeholder + locked tome), Quests (parchment list + journal hint), Help (full keybinds + slash-command reference). All modals dismiss via veil click, Esc, or ✕. Build-mode (`/command we`) hides the plate / Atlas / Output meter so the admin sees a clean canvas; chat + Codex + Crown stay.
+  - **Dev hook**: appending `?hud-demo=1` to the URL boots straight into the realm HUD with a synthetic Architect vessel — for fast layout sanity-checks without going through login.
 - **In-realm avatars** — Admin renders with their real spritesheet (per-direction idle + walk frames, per-frame slice metadata respected), with foot-anchored draw position and a soft elliptical shadow. Players currently fall through to a race-tinted circle. Movement is server-authoritative at 20Hz but each avatar is exponentially smoothed toward its target every render frame (~16/s catch-up), so 60fps motion is silky. Camera follows the smoothed self-position so it never jitters.
 - **Speech bubbles** — Chat lines float for 4.5s as a parchment bubble above the speaker's head (everywhere in the shard, including their own client), with a soft fade-out in the last 600ms.
 - **Chat UX** — `T` opens chat from anywhere; submitting the input auto-blurs so movement keys take over again until `T` is pressed. Click the chat header to fold the panel down to just its title bar; clicking again expands it back (history is preserved).
@@ -76,10 +84,19 @@ Sprite-slice and tilemap data live on disk under `data/`, not in Postgres, so ad
 - **Coordinates readout** — The mini-map foot now shows the player's own integer tile each frame (was previously the mouse hover, which only made sense in the editor).
 - **Server-0 admin gate** — Until `/command create_server` + `/command world_publish` ship, only admins may step into the only existing shard. The WS upgrade rejects non-admins with `403 No published server yet`, the character-sheet "Enter the Realm" button is disabled for players, and the player-side note explains they're waiting for a player shard to open.
 
+- **Combat slice (§5/§7)** — Server is sole authority on damage and cooldowns; clients only send intent and render the broadcast.
+  - **Vitals** — HP / Mana / Stamina each have a cap (`max_hp` / `mana_cap` / `stamina_cap` columns) and stream live in every 20 Hz state packet, so the HUD bars are never out-of-sync. Welcome packet seeds the full stat block (control, efficiency, cast_speed, resistance, level, xp, weapon).
+  - **Stamina** — Sprint+move drains 15.7 / sec; stationary or walking, stamina regens 12 / sec back up to cap.
+  - **Mana** — Regens 8 × efficiency / sec, always.
+  - **HP** — Regens 1.5 / sec **only** if no damage taken in the last 5 s (out-of-combat lockout).
+  - **Slot 1 (basic attack)** — Press `1` to swing the racial weapon (Free Hand for admins). Server does a rectangular front-arc hit-test (per-weapon `reach` × `arc`), applies `weapon.dmg + control × 0.5` minus `target.resistance / 200`, persists HP, broadcasts `swing` (gold 220 ms arc) + `hit` (red `-N` damage popup, 900 ms float). Cooldown = `weapon.cd` ms; insufficient stamina returns `attack_denied{reason:"stamina"}` → chat err.
+  - **Slot 2 (Mana Bolt)** — Press `2` to cast the first weave. Server does a long, narrow forward-lane hit-test (8 tiles × ±0.55), picks first target only (lance-line). Damage = `(18 + control × 0.6) × output`; mana cost = `30 × output` rounded, both scaled by the channeled Output dial (5–100%, mouse-wheel). Cooldown = `900 / cast_speed` ms (min 150). Broadcasts a `bolt` event (animated arcane beam: white-hot core inside cyan-blue glow; width and tip flare scale with output). Insufficient mana → `cast_denied{reason:"mana"}`.
+  - **Death** — When HP ≤ 0, `slay()` broadcasts `slain{by, name}`, persists `died_at`, and (after a 1.5 s "YOU HAVE FALLEN" parchment veil) kicks the loser's socket with WS code 4001 so they're bounced back to the character forge per the existing permadeath flow.
+  - **Spellbook modal** now lists Mana Bolt as available (other spells stay locked).
+
 ## Next up (per design doc)
-- Basic attack on key `1` with weapon damage scaling (§7) — needs hit detection against other players + monsters
-- Stamina cap + sprint drain (§5) so sprinting actually costs something
-- Mana / Mana regen / Output scroll-wheel + Mana Bolt as the first castable spell (§14)
-- HP regen (out-of-combat only) and the on-zero death broadcast that wires the existing `die` flow into combat
 - Wire the Map Workshop's parsed TMX into a tile-aware collision pass so painted walls actually block movement
 - Replace the placeholder circle-avatars with the per-race idle/walk sprite sheets once they exist (uses the same slice pipeline as the portrait)
+- Brief red avatar flash on hit (state.fx.hits is already populated, just needs a draw-time tint)
+- More spells (Ward of the Veil, Ember Step, Soulbind) following the same `tryCast` pattern
+- Monsters / NPCs to give players something to swing at outside of PvP

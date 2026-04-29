@@ -57,6 +57,13 @@
 
   const hbWeaponIcon = $("#hb-weapon-icon");
   const hbWeaponName = $("#hb-weapon-name");
+  const statsCast    = $("#stats-cast");
+
+  // HUD portrait (in the bottom-center plate)
+  const hudPortrait      = $("#hud-portrait-canvas");
+  const hudPortraitCtx   = hudPortrait.getContext("2d");
+  hudPortraitCtx.imageSmoothingEnabled = false;
+  const hudPortraitEmpty = $("#hud-portrait-empty");
 
   // Output meter (scroll wheel adjusts in player mode; locked in editor mode).
   const outputBox    = $("#realm-output");
@@ -69,6 +76,70 @@
   const chatBody     = $("#chat-body");
   const chatHint     = $("#chat-hint");
   const chatCollapseGlyph = $("#chat-collapse");
+
+  // Modals (Atlas, Settings, Vessel, Satchel, Spellbook, Quests, Help)
+  const modalVeil   = $("#modal-veil");
+  const modals      = {
+    map:        $("#modal-map"),
+    settings:   $("#modal-settings"),
+    character:  $("#modal-character"),
+    inventory:  $("#modal-inventory"),
+    spellbook:  $("#modal-spellbook"),
+    quests:     $("#modal-quests"),
+    help:       $("#modal-help"),
+  };
+  const codexButtons = document.querySelectorAll(".codex-btn[data-modal]");
+  const atlasExpand  = $("#atlas-expand-btn");
+
+  // Map-modal canvas + stat readouts
+  const mapModalCanvas = $("#map-modal-canvas");
+  const mapModalCtx    = mapModalCanvas.getContext("2d");
+  mapModalCtx.imageSmoothingEnabled = false;
+  const mapPos    = $("#map-pos");
+  const mapSouls  = $("#map-souls");
+
+  // Vessel-modal portrait + stat readouts
+  const charModalPortrait    = $("#char-modal-portrait");
+  const charModalPortraitCtx = charModalPortrait.getContext("2d");
+  charModalPortraitCtx.imageSmoothingEnabled = false;
+  const charModalRefs = {
+    name:   $("#char-modal-name"),
+    race:   $("#char-modal-race"),
+    level:  $("#char-modal-level"),
+    hp:     $("#char-modal-hp"),
+    mp:     $("#char-modal-mp"),
+    st:     $("#char-modal-st"),
+    xp:     $("#char-modal-xp"),
+    ctrl:   $("#char-modal-ctrl"),
+    cast:   $("#char-modal-cast"),
+    eff:    $("#char-modal-eff"),
+    res:    $("#char-modal-res"),
+    weapon: $("#char-modal-weapon"),
+  };
+
+  // Settings inputs (saved in localStorage so preferences persist)
+  const setZoom        = $("#set-zoom");
+  const setZoomNum     = $("#set-zoom-num");
+  const setVol         = $("#set-vol");
+  const setVolNum      = $("#set-vol-num");
+  const setShowFps     = $("#set-show-fps");
+  const setPixelPerf   = $("#set-pixel-perfect");
+  const setShowGrid    = $("#set-show-grid");
+  const setShowCoords  = $("#set-show-coords");
+  const setMuteAmb     = $("#set-mute-amb");
+  const setLeaveBtn    = $("#set-leave-btn");
+
+  // Inventory placeholder grid (24 cells)
+  (() => {
+    const inv = $("#inv-grid");
+    if (inv && !inv.childElementCount) {
+      for (let i = 0; i < 24; i++) {
+        const cell = document.createElement("div");
+        cell.className = "inv-cell is-locked";
+        inv.appendChild(cell);
+      }
+    }
+  })();
 
   // Per-race weapon glyph for the hotbar slot icon. Vague enough to work in
   // any system font — real per-weapon art lands when we have spell sheets.
@@ -237,12 +308,19 @@
     mouse: { x: 0, y: 0, tileX: 0, tileY: 0, leftDown: false, rightDown: false },
 
     // ---- character / vessel (snapshot from /api/characters/me at enter) ----
-    // We keep current_hp/mp/stamina locally as floats and clamp on render.
-    // The server doesn't push these yet — combat/regen lands in a later
-    // slice — so they sit pinned at max for now. The rest of the fields
-    // come straight from the API row and are read-only during the session.
+    // The base stat block (max_hp, mana_cap, stamina_cap, control, etc.)
+    // comes from /api/characters/me on enter, but the LIVE vitals
+    // (hp/mana/stamina) are server-authoritative — every welcome + state
+    // packet overwrites state.cur with the truth from the tick loop.
     character: null,
     cur: { hp: 0, mp: 0, st: 0 },
+
+    // ---- combat FX (transient, render-only) -----------------------------
+    // swings: { id, x, y, facing, reach, arc, t0, weapon }  — fades over 220ms
+    // pops:   { id, x, y, dmg, t0, dy }                     — floating numbers
+    // hits:   targetId -> tFlashUntil                        — red avatar pulse
+    fx: { swings: [], pops: [], hits: new Map(), bolts: [] },
+    deadOverlay: null,           // { until, by } — death modal countdown
 
     // ---- realtime / multiplayer ----
     me: null,                   // { id, name, x, y, facing, isAdmin, race } — authoritative latest
@@ -354,6 +432,19 @@
       return;
     }
     if (isTypingInChat()) return;
+    // Hotbar slot 1 → basic weapon swing. Editor mode is build-only, so
+    // attacks are politely ignored while a `/command we` palette is up.
+    if (key === "1" && !state.editor.open) {
+      e.preventDefault();
+      sendAttack();
+    }
+    // Hotbar slot 2 → Mana Bolt. Cost & damage scale with the channeled
+    // Output dial (mouse-wheel). Held back the same way as melee while
+    // the world editor palette is up.
+    if (key === "2" && !state.editor.open) {
+      e.preventDefault();
+      sendCast("mana_bolt");
+    }
     if (key) state.keys.add(key);
   });
   document.addEventListener("keyup", (e) => {
@@ -708,7 +799,11 @@
     const recs = Array.from(state.renderPlayers.values())
       .sort((a, b) => a.y - b.y);
     for (const rec of recs) drawPlayer(rec, tilePx, rec.id === meId);
-    // Speech bubbles last so they sit on top of every avatar.
+    // Combat FX: swing arcs above avatars, damage pops above arcs, speech
+    // bubbles above all of it.
+    drawSwings(tilePx);
+    drawBolts(tilePx);
+    drawHitPops(tilePx);
     for (const rec of recs) drawBubble(rec, tilePx);
 
     // Editor overlays: light grid + cursor highlight.
@@ -719,6 +814,155 @@
 
     // Origin cross — easy reference point for admins navigating with WASD.
     drawOriginCross(tilePx);
+
+    // Death veil — drawn last so it covers every layer including the FX.
+    if (state.deadOverlay) drawDeathVeil();
+  }
+
+  // ---- combat FX: slash arcs + floating damage numbers --------------
+  // Both fade out over a fixed window (220 ms / 900 ms). We don't bother
+  // with a separate animation rAF — the existing render loop already
+  // runs at display rate and sweeps these every frame.
+  const SWING_LIFE_MS = 220;
+  const POP_LIFE_MS   = 900;
+  function drawSwings(tilePx) {
+    const now = performance.now();
+    const fv = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
+    const live = [];
+    for (const sw of state.fx.swings) {
+      const age = now - sw.t0;
+      if (age >= SWING_LIFE_MS) continue;
+      live.push(sw);
+      const t = age / SWING_LIFE_MS;            // 0 → 1
+      const alpha = 1 - t;
+      const [dx, dy] = fv[sw.facing] || fv.down;
+      // Anchor the arc to the swinger's snapshot pos, projected forward.
+      const { sx, sy } = worldToScreen(sw.x, sw.y, tilePx);
+      const cx = sx + tilePx / 2 + dx * tilePx * sw.reach * 0.55;
+      const cy = sy + tilePx / 2 + dy * tilePx * sw.reach * 0.55;
+      const r  = tilePx * (sw.reach * 0.55) * (0.7 + 0.3 * t);
+      // Sweep angle: perpendicular to facing
+      const baseAng = Math.atan2(dy, dx);
+      const half = (Math.PI / 3) * (0.6 + 0.4 * t);
+      ctx.save();
+      ctx.lineWidth = Math.max(2, tilePx * 0.18);
+      ctx.lineCap = "round";
+      ctx.strokeStyle = `rgba(246,228,163,${0.85 * alpha})`;
+      ctx.shadowColor = "rgba(246,228,163,0.7)";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, baseAng - half, baseAng + half);
+      ctx.stroke();
+      ctx.restore();
+    }
+    state.fx.swings = live;
+  }
+  function drawHitPops(tilePx) {
+    const now = performance.now();
+    const live = [];
+    for (const pop of state.fx.pops) {
+      const age = now - pop.t0;
+      if (age >= POP_LIFE_MS) continue;
+      live.push(pop);
+      const t = age / POP_LIFE_MS;
+      const alpha = 1 - t;
+      // Track the target if it's still around; else stick to snapshot pos.
+      const rec = state.renderPlayers.get(pop.id);
+      const wx = rec ? rec.x : pop.x;
+      const wy = rec ? rec.y : pop.y;
+      const { sx, sy } = worldToScreen(wx, wy, tilePx);
+      const cx = sx + tilePx / 2;
+      const cy = sy - 8 - t * 32;          // float upward over the life
+      ctx.save();
+      ctx.font = `700 ${Math.round(tilePx * 0.95)}px "Cinzel", serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = `rgba(20,12,6,${0.85 * alpha})`;
+      ctx.fillStyle   = `rgba(255,138,122,${alpha})`;
+      const txt = `-${pop.dmg}`;
+      ctx.strokeText(txt, cx, cy);
+      ctx.fillText(txt, cx, cy);
+      ctx.restore();
+    }
+    state.fx.pops = live;
+  }
+
+  // Mana Bolt beam — a glowing arcane lance that grows from the caster's
+  // position toward the impact point at the spell's flight speed, then
+  // briefly hangs in the air and fades. Width and brightness scale with
+  // the caster's channeled Output, so a 100% bolt looks much heavier
+  // than a 10% poke.
+  function drawBolts(tilePx) {
+    const now = performance.now();
+    const live = [];
+    for (const b of state.fx.bolts) {
+      const age = now - b.t0;
+      if (age > b.travelMs + b.fadeMs) continue;
+      live.push(b);
+      const flightP = Math.min(1, age / Math.max(1, b.travelMs));
+      const fadeAmt = age > b.travelMs ? Math.min(1, (age - b.travelMs) / b.fadeMs) : 0;
+      const alpha = 1 - fadeAmt * 0.95;
+      const a = worldToScreen(b.fromX, b.fromY, tilePx);
+      const tipWX = b.fromX + (b.toX - b.fromX) * flightP;
+      const tipWY = b.fromY + (b.toY - b.fromY) * flightP;
+      const tip   = worldToScreen(tipWX, tipWY, tilePx);
+      const out   = b.output;
+      const lw    = (3 + out * 4) * (1 - fadeAmt * 0.5);
+
+      ctx.save();
+      ctx.lineCap = "round";
+      // Outer glow
+      ctx.globalAlpha = 0.55 * alpha;
+      ctx.strokeStyle = "rgba(140, 200, 255, 1)";
+      ctx.lineWidth = lw + 6;
+      ctx.shadowColor = "rgba(120, 180, 255, 0.9)";
+      ctx.shadowBlur = 14 + out * 10;
+      ctx.beginPath();
+      ctx.moveTo(a.sx, a.sy);
+      ctx.lineTo(tip.sx, tip.sy);
+      ctx.stroke();
+      // Hot core
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = "rgba(245, 248, 255, 1)";
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(a.sx, a.sy);
+      ctx.lineTo(tip.sx, tip.sy);
+      ctx.stroke();
+      // Tip flare on impact
+      if (flightP >= 1) {
+        ctx.globalAlpha = (1 - fadeAmt) * 0.8;
+        ctx.fillStyle = "rgba(180, 220, 255, 1)";
+        ctx.beginPath();
+        ctx.arc(tip.sx, tip.sy, 6 + out * 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    state.fx.bolts = live;
+  }
+
+  function drawDeathVeil() {
+    const w = canvas.width, h = canvas.height;
+    const now = performance.now();
+    const left = Math.max(0, state.deadOverlay.until - now);
+    const fade = Math.min(1, (4500 - left) / 600);
+    ctx.save();
+    ctx.fillStyle = `rgba(8,4,4,${0.78 * fade})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = `rgba(255,108,108,${fade})`;
+    ctx.font = `900 ${Math.round(Math.min(w, h) * 0.09)}px "Cinzel", serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.9)";
+    ctx.shadowBlur = 18;
+    ctx.fillText("YOU HAVE FALLEN", w/2, h/2 - 18);
+    ctx.font = `500 ${Math.round(Math.min(w, h) * 0.028)}px "Cormorant Garamond", serif`;
+    ctx.fillStyle = `rgba(246,228,163,${0.9 * fade})`;
+    ctx.fillText(`Slain by ${state.deadOverlay.by} — the vessel is spent.`, w/2, h/2 + 30);
+    ctx.restore();
   }
 
   // ---- avatar rendering ----
@@ -967,6 +1211,25 @@
     try { state.ws.send(JSON.stringify({ type: "input", ...inp })); } catch {}
   }
 
+  // Slot-1 attack — fires whatever weapon the vessel is wearing. The
+  // server is the sole authority on cooldown / stamina / damage; we just
+  // send the intent and let it answer with {swing}/{hit}/{attack_denied}.
+  function sendAttack() {
+    if (!state.wsReady || !state.me) return;
+    const facing = state.me.facing || "down";
+    try { state.ws.send(JSON.stringify({ type: "attack", facing })); } catch {}
+  }
+
+  // Slot-2 cast — Mana Bolt for now. The dial-in `output` (5–100%) is sent
+  // as a unit float; server pays the mana, picks the first target in the
+  // lane in front of us, and broadcasts a {bolt} for everyone to render.
+  function sendCast(spell) {
+    if (!state.wsReady || !state.me) return;
+    const facing = state.me.facing || "down";
+    const output = Math.max(0.05, Math.min(1, (state.output || 100) / 100));
+    try { state.ws.send(JSON.stringify({ type: "cast", spell, facing, output })); } catch {}
+  }
+
   let lastTickTime = 0;
   function tick(now) {
     const dt = lastTickTime ? Math.min(0.1, (now - lastTickTime) / 1000) : 0;
@@ -1071,6 +1334,19 @@
           ensureRenderRec(o);
         }
         setPresence(state.others.size + 1);
+        // Hydrate the HUD from authoritative vitals — the server may have
+        // a wounded HP from a previous session, and stamina/mana always
+        // start at cap.
+        if (state.character) {
+          if (msg.you.hpMax)   state.character.max_hp      = msg.you.hpMax;
+          if (msg.you.manaMax) state.character.mana_cap    = msg.you.manaMax;
+          if (msg.you.stMax)   state.character.stamina_cap = msg.you.stMax;
+          if (msg.you.weapon)  state.character.starting_weapon = msg.you.weapon;
+          state.cur.hp = msg.you.hp ?? state.cur.hp;
+          state.cur.mp = msg.you.mana ?? state.cur.mp;
+          state.cur.st = msg.you.st ?? state.cur.st;
+          refreshBars();
+        }
         chat(`Shard "${msg.shard}" — ${state.others.size} other ${state.others.size === 1 ? "soul" : "souls"} present.`, "cmd");
         break;
       case "join":
@@ -1091,6 +1367,12 @@
           if (state.me && p.id === state.me.id) {
             state.me.x = p.x; state.me.y = p.y;
             state.me.facing = p.facing; state.me.anim = p.anim;
+            // Mirror live vitals into HUD; tick is 20Hz which is fine
+            // for the bar smoothing and number readouts.
+            if (typeof p.hp === "number") state.cur.hp = p.hp;
+            if (typeof p.mana === "number") state.cur.mp = p.mana;
+            if (typeof p.st === "number") state.cur.st = p.st;
+            refreshBars();
           } else {
             const cur = state.others.get(p.id);
             if (cur) { Object.assign(cur, p); }
@@ -1120,8 +1402,97 @@
           attachBubble(msg.from.id, msg.text);
         }
         break;
+      case "swing": {
+        // Render a fading slash arc in front of the swinger. We snapshot
+        // the swinger's render position so the arc stays anchored even if
+        // they keep moving.
+        const rec = state.renderPlayers.get(msg.id);
+        if (rec) {
+          state.fx.swings.push({
+            id: msg.id,
+            x: rec.x, y: rec.y,
+            facing: msg.facing || rec.facing || "down",
+            reach: msg.reach || 1.2,
+            arc: msg.arc || 0.7,
+            t0: performance.now(),
+            weapon: msg.weapon,
+          });
+        }
+        break;
+      }
+      case "hit": {
+        // Floating damage number above the target, plus a brief red flash.
+        const rec = state.renderPlayers.get(msg.id);
+        const now = performance.now();
+        if (rec) {
+          state.fx.pops.push({
+            id: msg.id,
+            x: rec.x, y: rec.y,
+            dmg: msg.dmg,
+            t0: now,
+          });
+          state.fx.hits.set(msg.id, now + 220);
+        }
+        // If we're the one taking the hit, knock our local HP down right
+        // away (the next state packet will confirm) so the bar reacts
+        // before the next tick lands.
+        if (state.me && msg.id === state.me.id && typeof msg.hp === "number") {
+          state.cur.hp = msg.hp;
+          refreshBars();
+        }
+        break;
+      }
+      case "attack_denied":
+        if (msg.reason === "stamina") chat("Too winded — catch your breath.", "err");
+        break;
+      case "bolt": {
+        // Add a flying-beam effect that travels from caster to endpoint
+        // at the spell's tile/sec speed; the renderer will draw it for
+        // however long the trip + a short fade takes.
+        const dx = msg.to.x - msg.from.x;
+        const dy = msg.to.y - msg.from.y;
+        const dist = Math.hypot(dx, dy) || 0.0001;
+        const travelMs = (dist / Math.max(1, msg.speed || 18)) * 1000;
+        state.fx.bolts.push({
+          spell: msg.spell,
+          fromX: msg.from.x, fromY: msg.from.y,
+          toX:   msg.to.x,   toY:   msg.to.y,
+          output: msg.output || 1,
+          t0: performance.now(),
+          travelMs,
+          fadeMs: 220,
+        });
+        // If the caster was us, deduct mana locally for snappy feedback.
+        if (state.me && msg.from.id === state.me.id) {
+          // Server is authoritative — next state packet refreshes anyway,
+          // but the bolt event itself implies the cost was paid.
+          // (No-op here: state ticks at 20Hz, so the bar will update fast.)
+        }
+        break;
+      }
+      case "cast_denied":
+        if (msg.reason === "mana") chat("Not enough mana for that bolt.", "err");
+        break;
+      case "slain": {
+        const isMe = state.me && msg.id === state.me.id;
+        const byTxt = msg.by ? msg.by.name : "the realm";
+        if (isMe) {
+          // Flag self-death — render loop pops a parchment death screen
+          // over the canvas; the socket will close right after.
+          state.deadOverlay = { until: performance.now() + 4500, by: byTxt };
+          chat(`You were slain by ${byTxt}. The vessel is spent.`, "err");
+        } else {
+          chat(`${msg.name || "Someone"} fell to ${byTxt}.`, "cmd");
+        }
+        break;
+      }
       case "goodbye":
         chat("Server: " + (msg.reason || "disconnected"), "err");
+        if (msg.reason === "slain") {
+          // Hold the death overlay long enough to read it, then bow out
+          // so the player lands on the forge to mourn / re-vessel.
+          setTimeout(() => leave(), 1500);
+        }
         break;
     }
   }
@@ -1144,15 +1515,108 @@
     statsName.textContent  = ch.name || "—";
     statsLevel.textContent = ch.level ?? 1;
     const isAdmin = ch.race === null || ch.race === undefined;
-    statsRace.textContent  = isAdmin ? "Architect" : (ch.race_name || ch.race || "—");
+    const raceLabel = isAdmin ? "Architect" : (ch.race_name || ch.race || "—");
+    statsRace.textContent  = raceLabel;
     statsRace.classList.toggle("is-admin", isAdmin);
     statsXp.textContent    = ch.xp ?? 0;
     statsCtrl.textContent  = ch.control ?? 10;
     statsRes.textContent   = `${ch.resistance ?? 0}%`;
+    if (statsCast) statsCast.textContent = `${(ch.cast_speed ?? 1).toFixed(1)}×`;
     const weapon = ch.starting_weapon || (isAdmin ? "Free Hand" : "—");
     hbWeaponName.textContent = weapon;
     hbWeaponIcon.textContent = WEAPON_ICON[weapon] || "⚔";
+
+    // Mirror everything into the Vessel modal so opening it gives a full sheet.
+    if (charModalRefs.name) {
+      charModalRefs.name.textContent  = ch.name || "—";
+      charModalRefs.race.textContent  = raceLabel;
+      charModalRefs.level.textContent = ch.level ?? 1;
+      charModalRefs.hp.textContent    = `${ch.hp ?? ch.max_hp ?? 0} / ${ch.max_hp ?? 0}`;
+      charModalRefs.mp.textContent    = `${ch.mana_cap ?? 0}`;
+      charModalRefs.st.textContent    = `${ch.stamina_cap ?? 0}`;
+      charModalRefs.xp.textContent    = `${ch.xp ?? 0}`;
+      charModalRefs.ctrl.textContent  = `${ch.control ?? 10}`;
+      charModalRefs.cast.textContent  = `${(ch.cast_speed ?? 1).toFixed(2)}×`;
+      charModalRefs.eff.textContent   = `${(ch.efficiency ?? 1).toFixed(2)}×`;
+      charModalRefs.res.textContent   = `${ch.resistance ?? 0}%`;
+      charModalRefs.weapon.textContent= weapon;
+    }
+
     refreshBars();
+    drawHudPortrait();
+  }
+
+  // ---- HUD portrait ---------------------------------------------------
+  // Draws the player into the bottom-HUD portrait frame. For admins we
+  // grab an idle "Down" frame from the sprite registry; for everyone else
+  // we paint a race-tinted glowing pip so the frame is never empty.
+  function drawHudPortrait() {
+    const ch = state.character;
+    if (!ch) return;
+    const isAdmin = ch.race === null || ch.race === undefined;
+    paintPortrait(hudPortraitCtx, hudPortrait.width, hudPortrait.height, ch, isAdmin);
+    if (charModalPortraitCtx) {
+      paintPortrait(charModalPortraitCtx, charModalPortrait.width, charModalPortrait.height, ch, isAdmin);
+    }
+    if (hudPortraitEmpty) hudPortraitEmpty.hidden = true;
+  }
+  function paintPortrait(c, w, h, ch, isAdmin) {
+    c.imageSmoothingEnabled = false;
+    // Backdrop wash — match the frame's tint.
+    const bg = c.createRadialGradient(w/2, h*0.35, 4, w/2, h/2, w*0.7);
+    bg.addColorStop(0, isAdmin ? "rgba(246,228,163,0.18)" : "rgba(91,140,255,0.16)");
+    bg.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = "rgba(0,0,0,0)";
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = bg;
+    c.fillRect(0, 0, w, h);
+
+    if (isAdmin && SpriteSet.loaded) {
+      const set = SpriteSet.sheets.admin.idle.down
+               || SpriteSet.sheets.admin.idle.right
+               || SpriteSet.sheets.admin.idle.up;
+      if (set && set.img) {
+        const slice = set.slice;
+        let sx, sy, sw, sh;
+        if (slice.perFrame && slice.frameRects && slice.frameRects[0]) {
+          ({ x: sx, y: sy, w: sw, h: sh } = slice.frameRects[0]);
+        } else {
+          sx = slice.offsetX; sy = slice.offsetY;
+          sw = slice.frameW;   sh = slice.frameH;
+        }
+        // Fit the sprite vertically with a margin so the head + torso show.
+        const targetH = h * 0.95;
+        const scale = targetH / sh;
+        const dw = sw * scale, dh = sh * scale;
+        const dx = (w - dw) / 2;
+        const dy = (h - dh) / 2 + h * 0.04;  // nudge down a hair
+        c.drawImage(set.img, sx, sy, sw, sh, dx, dy, dw, dh);
+        return;
+      }
+    }
+    // Fallback: race-tinted glowing pip.
+    const RACE = { human: "#f4d499", orc: "#7fe39a", elf: "#b9e6e6",
+                   crystalline: "#cfe4ff", voidborn: "#caa6ff" };
+    const fill = isAdmin ? "#f6e4a3" : (RACE[ch.race] || "#cfe4ff");
+    const r = w * 0.32;
+    c.fillStyle = "rgba(0,0,0,0.45)";
+    c.beginPath();
+    c.ellipse(w/2, h*0.78, r*0.85, r*0.32, 0, 0, Math.PI*2);
+    c.fill();
+    const glow = c.createRadialGradient(w/2, h/2, 0, w/2, h/2, r*1.6);
+    glow.addColorStop(0, fill);
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = glow;
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = fill;
+    c.beginPath();
+    c.arc(w/2, h/2, r, 0, Math.PI*2);
+    c.fill();
+    c.strokeStyle = "rgba(20,16,8,0.6)";
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(w/2, h/2, r, 0, Math.PI*2);
+    c.stroke();
   }
   function refreshBars() {
     const ch = state.character;
@@ -1180,11 +1644,11 @@
     presenceCt.textContent = n;
   }
 
-  // Mini-map: 160×160 px, 1 px ≈ 1 tile, range ±80 tiles around self.
+  // Mini-map: 200×200 px, 1 px ≈ 1 tile, range ±100 tiles around self.
   // Re-renders at ~12Hz (capped) so we never spend 60fps walking the world's
   // painted-tile maps. Draws background + paint (faint) + cardinal cross +
   // other souls + self pip with a glow halo and facing tick.
-  const MM_HALF = 80;
+  const MM_HALF = 100;
   let lastMinimapAt = 0;
   function renderMinimap() {
     const now = performance.now();
@@ -1283,6 +1747,164 @@
     setChatCollapsed(!state.chatCollapsed);
   });
 
+  // ---- modal system --------------------------------------------------
+  // Only one modal open at a time. Veil is shared. Esc closes the top-most
+  // modal first, falling through to the standard editor/chat handling.
+  let activeModal = null;
+  function openModal(name) {
+    const m = modals[name];
+    if (!m) return;
+    if (activeModal && activeModal !== name) closeModal();
+    m.hidden = false;
+    modalVeil.hidden = false;
+    activeModal = name;
+    // Light up the matching codex button.
+    codexButtons.forEach((b) => b.classList.toggle("is-active", b.dataset.modal === name));
+    // Per-modal hooks (refresh content on open).
+    if (name === "map") renderMapModal();
+    if (name === "character") drawHudPortrait();
+    // Close chat focus so keyboard shortcuts (Esc, etc.) work.
+    if (isTypingInChat()) chatInput.blur();
+  }
+  function closeModal() {
+    if (!activeModal) return;
+    const m = modals[activeModal];
+    if (m) m.hidden = true;
+    modalVeil.hidden = true;
+    codexButtons.forEach((b) => b.classList.remove("is-active"));
+    activeModal = null;
+  }
+  function toggleModal(name) {
+    if (activeModal === name) closeModal();
+    else openModal(name);
+  }
+  // Codex buttons → open / toggle modal of the same name.
+  codexButtons.forEach((b) => {
+    b.addEventListener("click", () => toggleModal(b.dataset.modal));
+  });
+  // Atlas expand button → open the full Atlas modal.
+  if (atlasExpand) atlasExpand.addEventListener("click", () => openModal("map"));
+  // Veil click + ✕ buttons close the active modal.
+  modalVeil.addEventListener("click", closeModal);
+  document.querySelectorAll("[data-modal-close]").forEach((b) => {
+    b.addEventListener("click", closeModal);
+  });
+  // Settings → leave button (mirror of crown leave).
+  if (setLeaveBtn) setLeaveBtn.addEventListener("click", () => { closeModal(); leave(); });
+
+  // Settings → live-bind controls to state where it matters.
+  if (setZoom) {
+    setZoom.addEventListener("input", () => {
+      const z = Math.max(1, Math.min(6, +setZoom.value || 2));
+      state.zoom = z;
+      if (setZoomNum) setZoomNum.textContent = z;
+    });
+  }
+  if (setVol) {
+    setVol.addEventListener("input", () => {
+      if (setVolNum) setVolNum.textContent = setVol.value;
+    });
+  }
+
+  // ---- map modal renderer ---------------------------------------------
+  // Same idea as renderMinimap but with a wider window (±200 tiles) and
+  // per-tile zoom so the canvas stays full-resolution. Re-renders on open
+  // and again whenever the player moves a tile while the modal is up.
+  const MAP_HALF = 160;        // ±160 tiles each direction
+  const MAP_SCALE = 2;         // 2px per world tile → 320×320 → fits 640×640
+  function renderMapModal() {
+    if (!modals.map || modals.map.hidden) return;
+    const w = mapModalCanvas.width, h = mapModalCanvas.height;
+    const cx = w / 2, cy = h / 2;
+    const scale = MAP_SCALE;             // px per world tile
+    mapModalCtx.fillStyle = "#0c0e14";
+    mapModalCtx.fillRect(0, 0, w, h);
+    const meRec = state.me ? state.renderPlayers.get(state.me.id) : null;
+    const meX = meRec ? meRec.x : 0;
+    const meY = meRec ? meRec.y : 0;
+
+    // Painted ground
+    if (state.world) {
+      mapModalCtx.fillStyle = "rgba(105, 145, 90, 0.55)";
+      let drawn = 0;
+      const cap = 18000;
+      outer: for (const layer of state.world.layers) {
+        for (const k in layer.tiles) {
+          const c = k.indexOf(",");
+          const tx = +k.slice(0, c), ty = +k.slice(c + 1);
+          const dx = tx - meX, dy = ty - meY;
+          if (Math.abs(dx) > MAP_HALF || Math.abs(dy) > MAP_HALF) continue;
+          mapModalCtx.fillRect(cx + dx * scale, cy + dy * scale, scale, scale);
+          if (++drawn >= cap) break outer;
+        }
+      }
+    }
+
+    // Cardinal cross
+    mapModalCtx.strokeStyle = "rgba(217,166,74,0.18)";
+    mapModalCtx.lineWidth = 1;
+    mapModalCtx.beginPath();
+    mapModalCtx.moveTo(cx + 0.5, 0); mapModalCtx.lineTo(cx + 0.5, h);
+    mapModalCtx.moveTo(0, cy + 0.5); mapModalCtx.lineTo(w, cy + 0.5);
+    mapModalCtx.stroke();
+
+    // Origin (0,0)
+    const oxd = -meX, oyd = -meY;
+    if (Math.abs(oxd) <= MAP_HALF && Math.abs(oyd) <= MAP_HALF) {
+      const ox = cx + oxd * scale, oy = cy + oyd * scale;
+      mapModalCtx.strokeStyle = "rgba(216,178,87,0.85)";
+      mapModalCtx.lineWidth = 1;
+      mapModalCtx.strokeRect(ox - 5, oy - 5, 10, 10);
+    }
+
+    // Other souls
+    for (const rec of state.renderPlayers.values()) {
+      if (state.me && rec.id === state.me.id) continue;
+      const dx = rec.x - meX, dy = rec.y - meY;
+      if (Math.abs(dx) > MAP_HALF || Math.abs(dy) > MAP_HALF) continue;
+      mapModalCtx.fillStyle = rec.isAdmin ? "#f6e4a3" : (RACE_COLOR[rec.race] || "#cfe4ff");
+      mapModalCtx.fillRect(cx + dx * scale - 1, cy + dy * scale - 1, scale + 2, scale + 2);
+    }
+
+    // Self pip with halo
+    if (meRec) {
+      const grd = mapModalCtx.createRadialGradient(cx, cy, 0, cx, cy, 18);
+      grd.addColorStop(0, "rgba(246,228,163,0.9)");
+      grd.addColorStop(1, "rgba(246,228,163,0)");
+      mapModalCtx.fillStyle = grd;
+      mapModalCtx.fillRect(cx - 18, cy - 18, 36, 36);
+      mapModalCtx.fillStyle = "#fff7d8";
+      mapModalCtx.fillRect(cx - 3, cy - 3, 6, 6);
+      mapModalCtx.strokeStyle = "rgba(20,16,8,0.9)";
+      mapModalCtx.strokeRect(cx - 3.5, cy - 3.5, 7, 7);
+    }
+
+    // Footnotes
+    if (mapPos) mapPos.textContent = state.me
+      ? `(${Math.round(state.me.x)}, ${Math.round(state.me.y)})` : "(?, ?)";
+    if (mapSouls) mapSouls.textContent = state.presence;
+  }
+  // Refresh while the modal is open so the player tracks movement.
+  setInterval(() => { if (activeModal === "map") renderMapModal(); }, 250);
+
+  // ---- in-realm shortcuts (M, C, I, K, J, H + Esc) ----------------------
+  document.addEventListener("keydown", (e) => {
+    if (realmEl.hidden) return;
+    if (isTypingInChat()) return;          // typing → ignore shortcuts
+    const key = (e.key || "").toLowerCase();
+
+    if (e.key === "Escape") {
+      if (activeModal) { closeModal(); e.preventDefault(); return; }
+      // (editor close + chat blur are handled by the older Esc handler)
+    }
+    const SHORT = { m: "map", c: "character", i: "inventory",
+                    k: "spellbook", j: "quests", h: "help" };
+    if (SHORT[key]) {
+      e.preventDefault();
+      toggleModal(SHORT[key]);
+    }
+  });
+
   // ---- enter / leave ----
   async function enter({ role, character }) {
     state.role = role || "player";
@@ -1332,4 +1954,25 @@
   });
 
   window.FreeformRealm = { enter, leave };
+
+  // ---- DEV: ?hud-demo=1 — mount the HUD with a fake vessel so we can
+  // sanity-check the layout without going through login. Safe to leave in
+  // (only fires when the query string explicitly opts in). ------------
+  if (typeof location !== "undefined" && /[?&]hud-demo=1\b/.test(location.search)) {
+    window.addEventListener("DOMContentLoaded", () => {
+      enter({
+        role: "admin",
+        character: {
+          name: "Aerynd of Firstlight",
+          race: null, race_name: "Architect",
+          level: 7, xp: 1340,
+          hp: 168, max_hp: 200,
+          mana_cap: 220, stamina_cap: 140,
+          control: 18, resistance: 12,
+          cast_speed: 1.25, efficiency: 1.10,
+          starting_weapon: "Free Hand",
+        },
+      }).catch(() => {});
+    });
+  }
 })();

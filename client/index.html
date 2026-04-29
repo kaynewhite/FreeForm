@@ -225,106 +225,110 @@
   <!-- REALM: full-viewport in-game view. Shown after "Enter the Realm".
        Painting happens live here via /command we, /command world_edit,
        and /command server_edit. The palette is screen-contained so only
-       the palette panel scrolls — the page itself never does. -->
+       the palette panel scrolls — the page itself never does.
+
+       Layout doctrine:
+         - Top-left  : ornate Crown bar (leave + server identity + presence).
+         - Top-right : Atlas/minimap with its own coords plate.
+         - Right rail: vertical Codex of tome buttons (Map, Char, Inv, Spells, Quests, Settings).
+         - Mid-left  : Voices (chat) panel. Slim, collapsible, never reaches the HUD.
+         - Bottom    : DOTA-2-style HUD plate — Portrait | Bars | Hotbar | Stats.
+         - Modals    : Atlas, Settings, Character, Inventory, Spellbook, Quests, Help.
+       Nothing overlaps. Nothing scrolls but the chat log and palette body. -->
   <section class="realm" id="realm" hidden>
     <canvas class="realm-canvas" id="realm-canvas"></canvas>
 
-    <!-- Top HUD: leave button on the far left, server identity badge, then
-         (right side) the editor flag. The mini-map is its own corner widget
-         underneath this row. -->
-    <div class="realm-hud-top">
-      <button class="link-btn" id="leave-realm-btn" type="button">← Leave</button>
-      <div class="realm-badge">
-        <span class="rb-label">Server</span>
-        <span class="rb-name" id="rb-server-name">0 · Firstlight</span>
-        <span class="rb-mode" id="rb-mode">Architect Mode</span>
-      </div>
-      <div class="realm-presence" title="Souls bound to this shard">
-        <span class="presence-glyph">✦</span>
-        <span class="presence-count" id="presence-count">1</span>
-      </div>
-      <span class="realm-edit-flag" id="realm-edit-flag" hidden>Editing · <span id="realm-edit-mode">we</span></span>
-    </div>
-
-    <!-- Mini-map: top-right corner. Renders self at center plus all visible
-         souls within ±80 tiles, race-tinted. -->
-    <aside class="realm-minimap">
-      <canvas id="minimap-canvas" width="160" height="160"></canvas>
-      <div class="minimap-foot">
-        <span class="mm-label">Pulse</span>
-        <span class="mm-coords" id="realm-coords">(0, 0)</span>
-      </div>
-    </aside>
-
-    <!-- Stat panel: bottom-left, sits ABOVE the chat rail. Shows the vessel
-         name + race badge, the three live bars (HP / Mana / Stamina), and a
-         small footer with XP, Control, and Resistance for quick reference. -->
-    <aside class="realm-stats" id="realm-stats">
-      <div class="stats-head">
-        <div class="stats-name-row">
-          <span class="stats-name" id="stats-name">—</span>
-          <span class="stats-race" id="stats-race">—</span>
-        </div>
-        <span class="stats-level">Lv <span id="stats-level-num">1</span></span>
-      </div>
-      <div class="stats-bars">
-        <div class="vbar bar-hp">
-          <span class="vbar-label">HP</span>
-          <div class="vbar-track"><div class="vbar-fill" id="bar-hp-fill"></div></div>
-          <span class="vbar-num" id="bar-hp-num">—</span>
-        </div>
-        <div class="vbar bar-mp">
-          <span class="vbar-label">MP</span>
-          <div class="vbar-track"><div class="vbar-fill" id="bar-mp-fill"></div></div>
-          <span class="vbar-num" id="bar-mp-num">—</span>
-        </div>
-        <div class="vbar bar-st">
-          <span class="vbar-label">ST</span>
-          <div class="vbar-track"><div class="vbar-fill" id="bar-st-fill"></div></div>
-          <span class="vbar-num" id="bar-st-num">—</span>
-        </div>
-      </div>
-      <div class="stats-foot">
-        <span>XP <b id="stats-xp">0</b></span>
-        <span>Ctrl <b id="stats-ctrl">10</b></span>
-        <span>Res <b id="stats-res">0%</b></span>
-      </div>
-    </aside>
-
-    <!-- Output meter: floats just above the hotbar, centered. Per design doc
-         §14 the scroll wheel sets channeled mana output 1..100% — that
-         system isn't built yet, so it sits at 100% and the wheel still
-         zooms the camera for now. -->
-    <div class="realm-output" id="realm-output">
-      <span class="out-label">Output</span>
-      <div class="out-track"><div class="out-fill" id="out-fill"></div></div>
-      <span class="out-num" id="out-num">100%</span>
-    </div>
-
-    <!-- Hotbar: bottom-center. Slot 1 holds the racial weapon (or "Free
-         Hand" for the Architect); slots 2..0 are reserved for spells once
-         the casting system lands and read as locked. -->
-    <div class="realm-hotbar" id="realm-hotbar">
-      <button class="hb-slot is-active" data-slot="1" type="button">
-        <span class="hb-key">1</span>
-        <span class="hb-icon" id="hb-weapon-icon">⚔</span>
-        <span class="hb-name" id="hb-weapon-name">—</span>
+    <!-- ============================================================ -->
+    <!-- TOP-LEFT — Crown bar: leave + server identity + presence    -->
+    <!-- ============================================================ -->
+    <div class="hud-crown" id="hud-crown">
+      <button class="crown-btn" id="leave-realm-btn" type="button" title="Return to character sheet">
+        <span class="cb-arrow" aria-hidden="true">‹</span>
+        <span class="cb-text">Leave</span>
       </button>
-      <button class="hb-slot is-locked" data-slot="2" type="button" disabled><span class="hb-key">2</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="3" type="button" disabled><span class="hb-key">3</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="4" type="button" disabled><span class="hb-key">4</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="5" type="button" disabled><span class="hb-key">5</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="6" type="button" disabled><span class="hb-key">6</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="7" type="button" disabled><span class="hb-key">7</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="8" type="button" disabled><span class="hb-key">8</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="9" type="button" disabled><span class="hb-key">9</span><span class="hb-lock">·</span></button>
-      <button class="hb-slot is-locked" data-slot="0" type="button" disabled><span class="hb-key">0</span><span class="hb-lock">·</span></button>
+      <div class="crown-badge" title="Realm shard">
+        <span class="cb-glyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M12 2 L14.5 9 L22 9 L16 13.5 L18.5 21 L12 16.5 L5.5 21 L8 13.5 L2 9 L9.5 9 Z"
+                  fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div class="cb-stack">
+          <span class="cb-label">Realm</span>
+          <span class="cb-name" id="rb-server-name">0 · Firstlight</span>
+        </div>
+        <span class="cb-mode" id="rb-mode">Architect Mode</span>
+      </div>
+      <div class="crown-presence" title="Souls bound to this shard">
+        <span class="cp-glyph" aria-hidden="true">✦</span>
+        <span class="cp-num" id="presence-count">1</span>
+        <span class="cp-label">Souls</span>
+      </div>
+      <span class="crown-edit-flag" id="realm-edit-flag" hidden>
+        <span class="cef-glyph">⚒</span>
+        Architect Editing · <span id="realm-edit-mode">we</span>
+      </span>
     </div>
 
-    <!-- Chat / command rail. The header doubles as a collapse handle —
-         click anywhere on it to fold the panel down to just the title bar. -->
-    <div class="realm-chat" id="realm-chat">
+    <!-- ============================================================ -->
+    <!-- TOP-RIGHT — Atlas (minimap) + zoom into the full Atlas       -->
+    <!-- ============================================================ -->
+    <aside class="hud-atlas" id="hud-atlas">
+      <div class="atlas-frame">
+        <span class="af-corner tl"></span><span class="af-corner tr"></span>
+        <span class="af-corner bl"></span><span class="af-corner br"></span>
+        <canvas id="minimap-canvas" width="200" height="200"></canvas>
+        <button class="atlas-expand" id="atlas-expand-btn" type="button" title="Open the Atlas (M)">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="atlas-foot">
+        <span class="af-label">Pulse</span>
+        <span class="af-coords" id="realm-coords">(0, 0)</span>
+      </div>
+    </aside>
+
+    <!-- ============================================================ -->
+    <!-- RIGHT RAIL — Codex of tome buttons                          -->
+    <!-- ============================================================ -->
+    <nav class="hud-codex" id="hud-codex" aria-label="Game menus">
+      <button class="codex-btn" data-modal="character" type="button" title="Vessel (C)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="cb-key">C</span>
+      </button>
+      <button class="codex-btn" data-modal="inventory" type="button" title="Satchel (I)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M5 8h14l-1.4 11a2 2 0 0 1-2 1.7H8.4a2 2 0 0 1-2-1.7L5 8zM9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span class="cb-key">I</span>
+      </button>
+      <button class="codex-btn" data-modal="spellbook" type="button" title="Spellbook (K)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM5 17a3 3 0 0 1 3-3h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 8v6M9 11h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span class="cb-key">K</span>
+      </button>
+      <button class="codex-btn" data-modal="quests" type="button" title="Quests (J)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M7 3h7l4 4v14H7zM14 3v4h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12h7M9 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span class="cb-key">J</span>
+      </button>
+      <button class="codex-btn" data-modal="map" type="button" title="Atlas (M)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v16M15 6v16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span class="cb-key">M</span>
+      </button>
+      <span class="codex-divider" aria-hidden="true"></span>
+      <button class="codex-btn" data-modal="help" type="button" title="Tome of Lore (H)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span class="cb-key">H</span>
+      </button>
+      <button class="codex-btn" data-modal="settings" type="button" title="Settings (Esc)">
+        <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.3l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span class="cb-key">⚙</span>
+      </button>
+    </nav>
+
+    <!-- ============================================================ -->
+    <!-- LEFT — Voices (chat). Slim, collapsible, capped above HUD.   -->
+    <!-- ============================================================ -->
+    <div class="hud-chat" id="realm-chat">
       <button type="button" class="chat-head" id="chat-head" title="Collapse / expand (chat history is preserved)">
+        <span class="chat-glyph" aria-hidden="true">❧</span>
         <span class="chat-title">Voices</span>
         <span class="chat-hint" id="chat-hint">T to speak</span>
         <span class="chat-collapse" id="chat-collapse" aria-hidden="true">▾</span>
@@ -332,14 +336,102 @@
       <div class="chat-body" id="chat-body">
         <div class="chat-log" id="chat-log"></div>
         <form class="chat-input-row" id="chat-form">
-          <input type="text" id="chat-input" autocomplete="off" placeholder="Speak — or whisper a /command we" maxlength="200" />
+          <span class="cir-glyph" aria-hidden="true">✒</span>
+          <input type="text" id="chat-input" autocomplete="off" placeholder="Speak — or whisper a /command…" maxlength="200" />
         </form>
       </div>
     </div>
 
-    <!-- Editor palette overlay. Hidden by default. Toggled by slash command.
-         Fixed to the right edge, screen-contained: only the palette body
-         scrolls, never the page. -->
+    <!-- ============================================================ -->
+    <!-- BOTTOM — Output meter floats over the central HUD plate     -->
+    <!-- ============================================================ -->
+    <div class="hud-output" id="realm-output">
+      <span class="ho-label">Channeled Output</span>
+      <div class="ho-track"><div class="ho-fill" id="out-fill"></div></div>
+      <span class="ho-num" id="out-num">100%</span>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- BOTTOM-CENTER — DOTA-2-style HUD plate                       -->
+    <!--   left wing : portrait + identity + level badge              -->
+    <!--   bars       : HP / MP / ST                                   -->
+    <!--   hotbar     : 10 slots (1 active racial + 9 locked)          -->
+    <!--   right wing : XP, Control, Resistance, Cast Speed            -->
+    <!-- ============================================================ -->
+    <div class="hud-plate" id="hud-plate">
+      <span class="plate-corner tl"></span><span class="plate-corner tr"></span>
+      <span class="plate-corner bl"></span><span class="plate-corner br"></span>
+      <span class="plate-trim trim-l" aria-hidden="true"></span>
+      <span class="plate-trim trim-r" aria-hidden="true"></span>
+
+      <!-- Left wing: portrait + identity -->
+      <div class="plate-portrait">
+        <div class="pp-frame">
+          <canvas id="hud-portrait-canvas" width="96" height="96"></canvas>
+          <span class="pp-empty" id="hud-portrait-empty">—</span>
+          <span class="pp-corner tl"></span><span class="pp-corner tr"></span>
+          <span class="pp-corner bl"></span><span class="pp-corner br"></span>
+          <span class="pp-level" title="Level"><span id="stats-level-num">1</span></span>
+        </div>
+        <div class="pp-identity">
+          <span class="pp-name" id="stats-name">—</span>
+          <span class="pp-race" id="stats-race">—</span>
+        </div>
+      </div>
+
+      <!-- Bars: HP / MP / ST -->
+      <div class="plate-bars">
+        <div class="vbar bar-hp">
+          <span class="vbar-icon" aria-hidden="true">♥</span>
+          <div class="vbar-track"><div class="vbar-fill" id="bar-hp-fill"></div></div>
+          <span class="vbar-num" id="bar-hp-num">—</span>
+        </div>
+        <div class="vbar bar-mp">
+          <span class="vbar-icon" aria-hidden="true">✦</span>
+          <div class="vbar-track"><div class="vbar-fill" id="bar-mp-fill"></div></div>
+          <span class="vbar-num" id="bar-mp-num">—</span>
+        </div>
+        <div class="vbar bar-st">
+          <span class="vbar-icon" aria-hidden="true">⚡</span>
+          <div class="vbar-track"><div class="vbar-fill" id="bar-st-fill"></div></div>
+          <span class="vbar-num" id="bar-st-num">—</span>
+        </div>
+      </div>
+
+      <!-- Hotbar: slot 1 holds the racial weapon; 2..0 reserved for spells -->
+      <div class="plate-hotbar" id="realm-hotbar">
+        <button class="hb-slot is-active" data-slot="1" type="button">
+          <span class="hb-key">1</span>
+          <span class="hb-icon" id="hb-weapon-icon">⚔</span>
+          <span class="hb-name" id="hb-weapon-name">—</span>
+        </button>
+        <button class="hb-slot is-active" data-slot="2" type="button" title="Mana Bolt — costs mana × output">
+          <span class="hb-key">2</span>
+          <span class="hb-icon">✦</span>
+          <span class="hb-name">Bolt</span>
+        </button>
+        <button class="hb-slot is-locked" data-slot="3" type="button" disabled><span class="hb-key">3</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="4" type="button" disabled><span class="hb-key">4</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="5" type="button" disabled><span class="hb-key">5</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="6" type="button" disabled><span class="hb-key">6</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="7" type="button" disabled><span class="hb-key">7</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="8" type="button" disabled><span class="hb-key">8</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="9" type="button" disabled><span class="hb-key">9</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked" data-slot="0" type="button" disabled><span class="hb-key">0</span><span class="hb-lock">⛧</span></button>
+      </div>
+
+      <!-- Right wing: secondary stats -->
+      <div class="plate-stats">
+        <div class="ps-stat"><span class="ps-label">XP</span><span class="ps-num" id="stats-xp">0</span></div>
+        <div class="ps-stat"><span class="ps-label">Ctrl</span><span class="ps-num" id="stats-ctrl">10</span></div>
+        <div class="ps-stat"><span class="ps-label">Res</span><span class="ps-num" id="stats-res">0%</span></div>
+        <div class="ps-stat"><span class="ps-label">Cast</span><span class="ps-num" id="stats-cast">1.0×</span></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- EDITOR PALETTE — admin tile painter (right-side overlay)    -->
+    <!-- ============================================================ -->
     <aside class="realm-palette" id="realm-palette" hidden>
       <header class="palette-head">
         <span class="palette-title">Tile Palette</span>
@@ -364,6 +456,211 @@
       <div class="palette-body" id="palette-body">Loading tilesets…</div>
       <p class="palette-hint">Left-click world: paint · Right-click: erase · WASD/Arrows: pan · Esc: close</p>
     </aside>
+
+    <!-- ============================================================ -->
+    <!-- MODALS — Atlas, Settings, Vessel, Satchel, Spellbook, ...   -->
+    <!-- All share .modal styling; only one is open at a time.        -->
+    <!-- ============================================================ -->
+    <div class="modal-veil" id="modal-veil" hidden></div>
+
+    <!-- Full Atlas (M) -->
+    <div class="modal" id="modal-map" data-modal="map" hidden>
+      <div class="modal-frame">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">✦</span>
+          <h2 class="modal-title">Atlas of the Realm</h2>
+          <span class="modal-sub" id="map-modal-sub">Shard 0 · Firstlight</span>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body modal-body--map">
+          <div class="map-stage">
+            <canvas id="map-modal-canvas" width="640" height="640"></canvas>
+            <div class="map-legend">
+              <span><i class="leg leg-self"></i> You</span>
+              <span><i class="leg leg-soul"></i> Other souls</span>
+              <span><i class="leg leg-paint"></i> Painted ground</span>
+              <span><i class="leg leg-origin"></i> Origin (0,0)</span>
+            </div>
+          </div>
+          <aside class="map-side">
+            <div class="map-stat"><span class="ms-l">Position</span><span class="ms-v" id="map-pos">—</span></div>
+            <div class="map-stat"><span class="ms-l">Souls in shard</span><span class="ms-v" id="map-souls">1</span></div>
+            <div class="map-stat"><span class="ms-l">Range shown</span><span class="ms-v">±160 tiles</span></div>
+            <p class="map-flavor">The threads of the realm laid bare. Painted ground glints faintly; every soul leaves a pulse.</p>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings (Esc) -->
+    <div class="modal" id="modal-settings" data-modal="settings" hidden>
+      <div class="modal-frame modal-frame--narrow">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">⚙</span>
+          <h2 class="modal-title">Settings</h2>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body">
+          <section class="settings-block">
+            <h3 class="sb-title">Display</h3>
+            <label class="setting-row">
+              <span class="sr-label">Pixel-perfect rendering</span>
+              <input type="checkbox" id="set-pixel-perfect" checked />
+            </label>
+            <label class="setting-row">
+              <span class="sr-label">Show FPS counter</span>
+              <input type="checkbox" id="set-show-fps" />
+            </label>
+            <label class="setting-row">
+              <span class="sr-label">Camera zoom (×<span id="set-zoom-num">2</span>)</span>
+              <input type="range" min="1" max="6" step="1" id="set-zoom" value="2" />
+            </label>
+          </section>
+          <section class="settings-block">
+            <h3 class="sb-title">Audio</h3>
+            <label class="setting-row">
+              <span class="sr-label">Master volume (<span id="set-vol-num">80</span>%)</span>
+              <input type="range" min="0" max="100" step="5" id="set-vol" value="80" />
+            </label>
+            <label class="setting-row">
+              <span class="sr-label">Mute ambient hum</span>
+              <input type="checkbox" id="set-mute-amb" />
+            </label>
+            <p class="settings-note">Audio system not yet woven — sliders saved for later.</p>
+          </section>
+          <section class="settings-block">
+            <h3 class="sb-title">HUD</h3>
+            <label class="setting-row">
+              <span class="sr-label">Show grid in editor</span>
+              <input type="checkbox" id="set-show-grid" checked />
+            </label>
+            <label class="setting-row">
+              <span class="sr-label">Show coordinates</span>
+              <input type="checkbox" id="set-show-coords" checked />
+            </label>
+          </section>
+          <div class="settings-actions">
+            <button class="ghost danger" id="set-leave-btn" type="button">Leave the Realm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vessel / Character (C) -->
+    <div class="modal" id="modal-character" data-modal="character" hidden>
+      <div class="modal-frame">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">❖</span>
+          <h2 class="modal-title">Vessel</h2>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body modal-body--char">
+          <div class="char-portrait">
+            <canvas id="char-modal-portrait" width="160" height="160"></canvas>
+            <span class="cp-frame-corner tl"></span><span class="cp-frame-corner tr"></span>
+            <span class="cp-frame-corner bl"></span><span class="cp-frame-corner br"></span>
+          </div>
+          <div class="char-detail">
+            <h3 class="char-name" id="char-modal-name">—</h3>
+            <p class="char-sub"><span id="char-modal-race">—</span> · Lv <span id="char-modal-level">1</span></p>
+            <div class="char-grid">
+              <div class="cg-stat"><dt>Health</dt><dd id="char-modal-hp">—</dd></div>
+              <div class="cg-stat"><dt>Mana cap</dt><dd id="char-modal-mp">—</dd></div>
+              <div class="cg-stat"><dt>Stamina cap</dt><dd id="char-modal-st">—</dd></div>
+              <div class="cg-stat"><dt>XP</dt><dd id="char-modal-xp">—</dd></div>
+              <div class="cg-stat"><dt>Control</dt><dd id="char-modal-ctrl">—</dd></div>
+              <div class="cg-stat"><dt>Cast Speed</dt><dd id="char-modal-cast">—</dd></div>
+              <div class="cg-stat"><dt>Efficiency</dt><dd id="char-modal-eff">—</dd></div>
+              <div class="cg-stat"><dt>Resistance</dt><dd id="char-modal-res">—</dd></div>
+              <div class="cg-stat"><dt>Weapon</dt><dd id="char-modal-weapon">—</dd></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Satchel / Inventory (I) -->
+    <div class="modal" id="modal-inventory" data-modal="inventory" hidden>
+      <div class="modal-frame">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">⚱</span>
+          <h2 class="modal-title">Satchel</h2>
+          <span class="modal-sub">0 / 24 weight</span>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body">
+          <div class="inv-grid" id="inv-grid"></div>
+          <p class="modal-flavor">The Satchel awaits its first treasure. Loot, crafting, and weight will land in a future weave.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spellbook (K) -->
+    <div class="modal" id="modal-spellbook" data-modal="spellbook" hidden>
+      <div class="modal-frame">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">✺</span>
+          <h2 class="modal-title">Spellbook</h2>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body">
+          <ul class="spell-list">
+            <li class="sl-row"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Mana Bolt</strong><em>Straight-line bolt. Damage and mana cost both scale with channeled Output.</em></div><span class="sl-key">2</span></li>
+            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Ward of the Veil</strong><em>Brief absorbing barrier. Drains stamina to maintain.</em></div><span class="sl-key">3</span></li>
+            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Ember Step</strong><em>Short blink in facing direction. Cooldown.</em></div><span class="sl-key">4</span></li>
+            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Soulbind</strong><em>Tether two souls — share a fraction of damage taken.</em></div><span class="sl-key">5</span></li>
+          </ul>
+          <p class="modal-flavor">Mana Bolt is the first weave — turn the Output dial low to conserve mana, high to commit.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quests (J) -->
+    <div class="modal" id="modal-quests" data-modal="quests" hidden>
+      <div class="modal-frame">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">⚜</span>
+          <h2 class="modal-title">Quests &amp; Lore</h2>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body">
+          <ul class="quest-list">
+            <li class="ql-row"><span class="ql-mark">●</span><div class="ql-text"><strong>Walk the plain grass.</strong><em>You stand. The realm hums. Find another soul, or simply wander.</em></div></li>
+            <li class="ql-row ql-locked"><span class="ql-mark">○</span><div class="ql-text"><strong>The first weave.</strong><em>Unlocks once an Architect publishes a player shard.</em></div></li>
+          </ul>
+          <p class="modal-flavor">Your story is yet unwritten.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tome of Lore / Help (H) -->
+    <div class="modal" id="modal-help" data-modal="help" hidden>
+      <div class="modal-frame">
+        <header class="modal-head">
+          <span class="modal-glyph" aria-hidden="true">✒</span>
+          <h2 class="modal-title">Tome of Lore</h2>
+          <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
+        </header>
+        <div class="modal-body">
+          <h3 class="sb-title">Movement</h3>
+          <ul class="help-list">
+            <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — walk · <kbd>Shift</kbd> — sprint</li>
+            <li>Mouse wheel — channel <em>Output</em> (player) / zoom (editor)</li>
+          </ul>
+          <h3 class="sb-title">Voice &amp; menus</h3>
+          <ul class="help-list">
+            <li><kbd>T</kbd> — speak · <kbd>Enter</kbd> — send · <kbd>Esc</kbd> — close panels / leave chat</li>
+            <li><kbd>M</kbd> Atlas · <kbd>C</kbd> Vessel · <kbd>I</kbd> Satchel · <kbd>K</kbd> Spellbook · <kbd>J</kbd> Quests · <kbd>H</kbd> Tome</li>
+          </ul>
+          <h3 class="sb-title">Architect commands</h3>
+          <ul class="help-list">
+            <li><code>/command we</code> — toggle the live tile editor</li>
+            <li><code>/command world_edit</code> · <code>/command server_edit</code> — same, longer aliases</li>
+            <li><code>/leave</code> — return to the character sheet</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </section>
 
   <script src="/app.js"></script>
