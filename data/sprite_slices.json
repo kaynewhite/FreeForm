@@ -272,17 +272,146 @@
     "updatedBy": 1
   },
   "/assets/sprites/admin/base/attack-spritesheets/no-weapon/admin-attackDown-spritesheet.png": {
-    "frames": 11,
-    "frameW": 43,
-    "frameH": 54,
+    "frames": 12,
+    "frameW": 33,
+    "frameH": 52,
     "offsetX": 0,
     "offsetY": 0,
-    "gapX": 22,
+    "gapX": 32,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 0,
+        "y": 0,
+        "w": 33,
+        "h": 52
+      },
+      {
+        "x": 64,
+        "y": 0,
+        "w": 35,
+        "h": 52
+      },
+      {
+        "x": 126,
+        "y": 0,
+        "w": 36,
+        "h": 52
+      },
+      {
+        "x": 195,
+        "y": 0,
+        "w": 33,
+        "h": 52
+      },
+      {
+        "x": 260,
+        "y": 0,
+        "w": 36,
+        "h": 52
+      },
+      {
+        "x": 322,
+        "y": 0,
+        "w": 40,
+        "h": 52
+      },
+      {
+        "x": 384,
+        "y": 0,
+        "w": 34,
+        "h": 52
+      },
+      {
+        "x": 451,
+        "y": 0,
+        "w": 39,
+        "h": 52
+      },
+      {
+        "x": 515,
+        "y": 0,
+        "w": 36,
+        "h": 52
+      },
+      {
+        "x": 577,
+        "y": 0,
+        "w": 36,
+        "h": 52
+      },
+      {
+        "x": 638,
+        "y": 0,
+        "w": 36,
+        "h": 52
+      },
+      {
+        "x": 703,
+        "y": 0,
+        "w": 35,
+        "h": 52
+      }
+    ],
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-27T19:06:38.303Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castDown-spritesheet.png": {
+    "frames": 7,
+    "frameW": 50,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 12,
     "perFrame": false,
     "frameRects": null,
-    "fps": 10,
+    "fps": 2,
     "scale": 3,
-    "updatedAt": "2026-04-27T18:06:03.120Z",
+    "updatedAt": "2026-04-27T19:15:20.559Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castLeft-spritesheet.png": {
+    "frames": 7,
+    "frameW": 34,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 30,
+    "perFrame": false,
+    "frameRects": null,
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T19:10:52.191Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castRight-spritesheet.png": {
+    "frames": 7,
+    "frameW": 34,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 30,
+    "perFrame": false,
+    "frameRects": null,
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T19:10:52.192Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castUp-spritesheet.png": {
+    "frames": 7,
+    "frameW": 34,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 30,
+    "perFrame": false,
+    "frameRects": null,
+    "fps": 2,
+    "scale": 3,
+    "updatedAt": "2026-04-27T19:10:52.449Z",
     "updatedBy": 1
   }
 }

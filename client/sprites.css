@@ -329,7 +329,7 @@
   max-height: 70vh;
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: safe center;
 }
 .sheet-stage {
   position: relative;
@@ -338,6 +338,12 @@
   cursor: crosshair;
   flex: 0 0 auto;
 }
+
+.sheet-stage img{
+  max-width: 100%;
+  height: auto;
+}
+
 .sheet-stage img,
 .sheet-stage canvas {
   image-rendering: pixelated;

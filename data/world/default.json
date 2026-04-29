@@ -3,11 +3,21 @@
   "tileSize": 16,
   "defaultGround": "grass:0",
   "createdAt": "2026-04-27T17:37:50.302Z",
-  "updatedAt": "2026-04-27T17:37:50.302Z",
+  "updatedAt": "2026-04-27T18:39:27.265Z",
   "layers": [
     {
       "name": "ground",
-      "tiles": {}
+      "tiles": {
+        "0,0": "terrain_set:545",
+        "0,-1": "terrain_set:513",
+        "1,-1": "terrain_set:514",
+        "1,0": "terrain_set:546",
+        "1,1": "terrain_set:578",
+        "0,1": "terrain_set:577",
+        "-1,1": "terrain_set:576",
+        "-1,0": "terrain_set:544",
+        "-1,-1": "terrain_set:512"
+      }
     },
     {
       "name": "decor",
