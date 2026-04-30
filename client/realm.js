@@ -219,7 +219,7 @@
   const SpriteSet = {
     loaded: false,
     slices: {},
-    sheets: { admin: { idle: {}, walk: {} } }, // sheets[role][anim][facing] = { img, slice }
+    sheets: { admin: { idle: {}, walk: {}, cast: {} } }, // sheets[role][anim][facing] = { img, slice }
   };
   function _loadImage(url) {
     return new Promise((resolve, reject) => {
@@ -252,9 +252,14 @@
     try { SpriteSet.slices = await api("/api/sprites/slices") || {}; }
     catch { SpriteSet.slices = {}; }
     const ROOT = "/assets/sprites/admin/base";
+    // We load idle/walk/cast for the four facings.  Cast sheets are the
+    // "no-weapon attack" art per the design doc — when the avatar starts
+    // a cast we briefly swap to the cast sheet snapped to the cardinal
+    // facing closest to the cursor (handled by aimFromCursor).
     const ANIMS = {
       idle: `${ROOT}/idle-spritesheets/no-weapon/admin-idle`,
       walk: `${ROOT}/walking-spritesheets/no-weapon/admin-walk`,
+      cast: `${ROOT}/cast-spritesheets/no-weapon/admin-cast`,
     };
     const DIRS = ["Up", "Down", "Left", "Right"];
     await Promise.all(Object.entries(ANIMS).flatMap(([anim, prefix]) =>
@@ -274,7 +279,10 @@
   }
   function getSpriteForPlayer(p, anim) {
     if (!p.isAdmin) return null;
-    const set = SpriteSet.sheets.admin[anim] || SpriteSet.sheets.admin.idle;
+    // If a cast set is requested but not loaded, fall back to idle so
+    // the avatar still renders rather than vanishing mid-cast.
+    const set = SpriteSet.sheets.admin[anim]
+             || SpriteSet.sheets.admin.idle;
     return set[p.facing] || set.down || null;
   }
 
@@ -615,24 +623,42 @@
       return;
     }
     if (isTypingInChat()) return;
-    // Hotbar slot 1 → basic weapon swing. Editor mode is build-only, so
-    // attacks are politely ignored while a `/command we` palette is up.
-    if (key === "1" && !state.editor.open) {
-      e.preventDefault();
-      sendAttack();
-    }
-    // Hotbar slot 2 → EQUIP Mana Bolt.  Per design doc §14/§18 the
-    // hotkey only toggles the spell into the active hand; it does not
-    // fire.  Casting happens on mouse click (left = tap @ 20%, right =
-    // hold-to-charge), with a 360° aim toward the cursor.
-    if (key === "2" && !state.editor.open) {
-      e.preventDefault();
-      toggleEquipSpell("mana_bolt");
+    // ── Hotbar quick-pick ─────────────────────────────────────────────
+    // Per design doc §14.2/§18 hotkeys only EQUIP — they never auto-fire.
+    //   • [1]   = equip Basic Attack (the racial weapon).  Click the world
+    //             to swing it toward the cursor.
+    //   • [2-6] = equip the spell pinned to that quick-pick slot.
+    //   • [F]   = hold to reveal the 15-slot radial Spell Wheel.
+    // Editor mode is build-only, so all of these are politely ignored
+    // while the tile palette is up.
+    if (!state.editor.open) {
+      if (key === "1") {
+        e.preventDefault();
+        equipBasicAttack();
+        return;
+      }
+      if (key >= "2" && key <= "6") {
+        e.preventDefault();
+        const slotBtn = document.querySelector(`.hb-slot[data-slot="${key}"]`);
+        const spellId = slotBtn && slotBtn.dataset.spell;
+        if (spellId) toggleEquipSpell(spellId);
+        else toast(`Slot ${key} is empty — open the Spellbook to bind a spell.`);
+        return;
+      }
+      if (key === "f" && !e.repeat) {
+        e.preventDefault();
+        showSpellWheel(true);
+        return;
+      }
     }
     if (key) state.keys.add(key);
   });
   document.addEventListener("keyup", (e) => {
     const key = (e.key || "").toLowerCase();
+    if (key === "f" && !state.editor.open) {
+      e.preventDefault();
+      showSpellWheel(false);
+    }
     if (key) state.keys.delete(key);
   });
 
@@ -659,14 +685,17 @@
       paintAt(x, y, e.button === 2);
       return;
     }
-    // ---- spell casting (player mode, slot-2 spell equipped) ------------
-    // Per design doc §14/§18:
-    //   • Left-click  = instant TAP cast at a fixed 20% Output (cheap,
-    //                   weak — used for poking).
-    //   • Right-click = HOLD to charge to your current Output dial; the
-    //                   meter pulses gold.  Release to cast at whatever
-    //                   the dial reads at release time.
-    if (state.equippedSpell && !state.editor.open) {
+    // ---- combat: spell casting OR basic-attack swing -------------------
+    // Per design doc §14/§18, behavior depends on what's in the active
+    // hand (the [data-equipped] hotbar slot):
+    //   • Spell equipped (slots 2-6 / wheel):
+    //       Left  = TAP cast @ 20% Output (cheap & weak — for poking).
+    //       Right = HOLD to charge to your Output dial; release to fire.
+    //   • Basic attack equipped (slot 1, the default):
+    //       Left  = swing the racial weapon toward the cursor.
+    //       Right = no-op (preserved for future block/parry mechanics).
+    if (state.editor.open) return;
+    if (state.equippedSpell) {
       if (e.button === 0) {
         sendCast(state.equippedSpell, 0.20);
       } else if (e.button === 2) {
@@ -675,6 +704,9 @@
         state.charge.output = state.output;
         outputBox && outputBox.classList.add("is-charging");
       }
+    } else {
+      // Nothing equipped → basic attack on left-click toward cursor.
+      if (e.button === 0) sendAttackToCursor();
     }
   });
   window.addEventListener("mouseup", (e) => {
@@ -1196,6 +1228,31 @@
     };
   }
 
+  // Screen-shake amplitude decays each frame; bumped by drawBolts on
+  // bolt impact (and by anything else dramatic in the future). Tiny
+  // amplitudes (<0.4 px) are zeroed so the world stops shimmering.
+  function consumeShake() {
+    const s = state.fx.shake || { amp: 0, until: 0 };
+    if (!s.amp || performance.now() > s.until) return { x: 0, y: 0 };
+    const a = s.amp;
+    return {
+      x: (Math.random() * 2 - 1) * a,
+      y: (Math.random() * 2 - 1) * a,
+    };
+  }
+  function pushShake(amp, ms) {
+    state.fx.shake = state.fx.shake || { amp: 0, until: 0 };
+    // Take the louder of the two so back-to-back impacts add weight.
+    state.fx.shake.amp   = Math.max(state.fx.shake.amp, amp);
+    state.fx.shake.until = Math.max(state.fx.shake.until, performance.now() + ms);
+  }
+  function tickShake() {
+    const s = state.fx.shake;
+    if (!s) return;
+    s.amp *= 0.86;                       // smooth decay each frame
+    if (s.amp < 0.4) s.amp = 0;
+  }
+
   function render() {
     const tilePx = state.tileSize * state.zoom;
     const cols = viewportTilesAcross() + 1;
@@ -1204,6 +1261,12 @@
     const camTileY = Math.floor(state.cameraY);
     const offX = -(state.cameraX - camTileX) * tilePx;
     const offY = -(state.cameraY - camTileY) * tilePx;
+    // Apply screen-shake to the entire frame (background-stars too — it
+    // really does feel like the void itself is rocked when a high-Output
+    // bolt slams home). We pair this with a single restore() at the end.
+    const shake = consumeShake();
+    ctx.save();
+    if (shake.x || shake.y) ctx.translate(shake.x, shake.y);
 
     // Background = the deep void of space, tiled. The starfield pattern is
     // 256×256 (one tile of the pattern covers many world-tiles) so we
@@ -1265,6 +1328,9 @@
     const meId = state.me?.id;
     const recs = Array.from(state.renderPlayers.values())
       .sort((a, b) => a.y - b.y);
+    // Charge aura draws BEHIND the avatars (it's a ground glow), then
+    // the avatars sit on top of it.
+    drawChargeAura(tilePx);
     for (const rec of recs) drawPlayer(rec, tilePx, rec.id === meId);
     // Combat FX: swing arcs above avatars, damage pops above arcs, speech
     // bubbles above all of it.
@@ -1284,6 +1350,55 @@
 
     // Death veil — drawn last so it covers every layer including the FX.
     if (state.deadOverlay) drawDeathVeil();
+
+    // Pop the screen-shake transform pushed at the top of the frame and
+    // decay the residual amplitude so the world settles smoothly.
+    ctx.restore();
+    tickShake();
+  }
+
+  // Charge aura — pulses under the caster while the right mouse button
+  // is held with a spell equipped. Read by the main render() loop just
+  // before the player avatars are drawn so the glow sits at the feet.
+  function drawChargeAura(tilePx) {
+    if (!state.charge || !state.charge.active || !state.me) return;
+    const rec = state.renderPlayers.get(state.me.id);
+    if (!rec) return;
+    const { sx, sy } = worldToScreen(rec.x, rec.y, tilePx);
+    const cx = sx + tilePx / 2;
+    const cy = sy + tilePx / 2;
+    // Charge ramps from 0→1 over ~600 ms then sustains; output in 0..1
+    // determines max brightness so a tiny dial barely glows.
+    const dt = (performance.now() - state.charge.t0) / 600;
+    const amt = Math.max(0, Math.min(1, dt));
+    const out = Math.max(0.05, Math.min(1, (state.output || 100) / 100));
+    const r = tilePx * (0.85 + amt * 0.7);
+    const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.012);
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy + tilePx * 0.25, tilePx * 0.1, cx, cy + tilePx * 0.25, r);
+    g.addColorStop(0.00, `rgba(176,112,255,${0.55 * amt * pulse * (0.4 + 0.6 * out)})`);
+    g.addColorStop(0.55, `rgba(91,140,255,${0.30 * amt * pulse * (0.4 + 0.6 * out)})`);
+    g.addColorStop(1.00, "rgba(60,30,110,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy + tilePx * 0.25, r, 0, Math.PI * 2);
+    ctx.fill();
+    // A thin spinning ring of sparks at the casting hand to sell the
+    // "drawing in mana" beat. Six dots orbiting at amt-scaled radius.
+    const ringR = tilePx * (0.55 + amt * 0.35);
+    const tnow = performance.now() * 0.005;
+    for (let i = 0; i < 6; i++) {
+      const a = tnow + (i / 6) * Math.PI * 2;
+      const px = cx + Math.cos(a) * ringR;
+      const py = cy + Math.sin(a) * ringR * 0.55;          // ellipse, sells "around the body"
+      ctx.fillStyle = `rgba(246,228,163,${0.85 * amt})`;
+      ctx.shadowColor = "rgba(246,228,163,0.85)";
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(px, py, 1.6 + amt * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ---- combat FX: slash arcs + floating damage numbers --------------
@@ -1312,14 +1427,39 @@
       const baseAng = Math.atan2(dy, dx);
       const half = (Math.PI / 3) * (0.6 + 0.4 * t);
       ctx.save();
-      ctx.lineWidth = Math.max(2, tilePx * 0.18);
+      // Layered arc: a wide soft halo behind, a bright thin stroke on
+      // top.  Reads as a real blade glint instead of a flat curve.
       ctx.lineCap = "round";
-      ctx.strokeStyle = `rgba(246,228,163,${0.85 * alpha})`;
-      ctx.shadowColor = "rgba(246,228,163,0.7)";
-      ctx.shadowBlur = 8;
+      ctx.shadowColor = "rgba(246,228,163,0.75)";
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = Math.max(4, tilePx * 0.30);
+      ctx.strokeStyle = `rgba(246,228,163,${0.30 * alpha})`;
       ctx.beginPath();
       ctx.arc(cx, cy, r, baseAng - half, baseAng + half);
       ctx.stroke();
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = Math.max(2, tilePx * 0.14);
+      ctx.strokeStyle = `rgba(255,250,225,${0.95 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, baseAng - half, baseAng + half);
+      ctx.stroke();
+
+      // Sparks at the leading tip — six small dots flung outward along
+      // the swing direction.  Their offsets are seeded from sw.t0 so a
+      // given swing always shows the same pattern of glints.
+      const seed = sw.t0 % 1000;
+      ctx.shadowBlur = 0;
+      for (let i = 0; i < 6; i++) {
+        const sa = baseAng + half * (0.7 - i * 0.16);
+        const sd = r + (((seed + i * 53) % 9) - 4) * 0.6 + t * tilePx * 0.45;
+        const sxk = cx + Math.cos(sa) * sd;
+        const syk = cy + Math.sin(sa) * sd;
+        const sr  = (1.4 + ((seed + i * 17) % 5) * 0.3) * (1 - t * 0.6);
+        ctx.fillStyle = `rgba(255,236,180,${alpha * (0.8 - i * 0.1)})`;
+        ctx.beginPath();
+        ctx.arc(sxk, syk, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
     state.fx.swings = live;
@@ -1435,18 +1575,47 @@
       ctx.arc(ball.sx, ball.sy, ballR * 0.45, 0, Math.PI * 2);
       ctx.fill();
 
+      // ---- launch flash at the caster (early lifetime only) ----------
+      if (flightP < 0.18) {
+        const launchA = (0.18 - flightP) / 0.18;
+        const origin  = worldToScreen(b.fromX, b.fromY, tilePx);
+        const launchR = ballR * (1.4 + launchA * 1.2);
+        const flash = ctx.createRadialGradient(origin.sx, origin.sy, 0, origin.sx, origin.sy, launchR);
+        flash.addColorStop(0.00, `rgba(255,250,225,${0.85 * launchA})`);
+        flash.addColorStop(0.45, `rgba(176,112,255,${0.55 * launchA})`);
+        flash.addColorStop(1.00, "rgba(60,30,110,0)");
+        ctx.fillStyle = flash;
+        ctx.beginPath();
+        ctx.arc(origin.sx, origin.sy, launchR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       // ---- impact burst on landing -----------------------------------
       if (flightP >= 1) {
+        // First frame of impact triggers a one-shot screen shake whose
+        // amplitude scales with Output — a 100% bolt rocks the void, a
+        // 20% poke barely registers.
+        if (!b._shook) {
+          b._shook = true;
+          pushShake(2.4 + out * 7.5, 220);
+        }
         const burstA = (1 - fadeAmt);
-        const burstR = ballR * (1.6 + (1 - fadeAmt) * 1.5);
+        const burstR = ballR * (1.8 + (1 - fadeAmt) * 1.7);
         const burst = ctx.createRadialGradient(ball.sx, ball.sy, 0, ball.sx, ball.sy, burstR);
-        burst.addColorStop(0.00, `rgba(255,236,180,${0.95 * burstA})`);
-        burst.addColorStop(0.40, `rgba(176,112,255,${0.55 * burstA})`);
-        burst.addColorStop(1.00, `rgba(60,30,110,0)`);
+        burst.addColorStop(0.00, `rgba(255,250,225,${0.98 * burstA})`);
+        burst.addColorStop(0.35, `rgba(255,236,180,${0.85 * burstA})`);
+        burst.addColorStop(0.65, `rgba(176,112,255,${0.55 * burstA})`);
+        burst.addColorStop(1.00, "rgba(60,30,110,0)");
         ctx.fillStyle = burst;
         ctx.beginPath();
         ctx.arc(ball.sx, ball.sy, burstR, 0, Math.PI * 2);
         ctx.fill();
+        // A brief outward shock-ring grows with the burst.
+        ctx.strokeStyle = `rgba(255,236,180,${0.7 * burstA})`;
+        ctx.lineWidth = Math.max(1.5, ballR * 0.35) * burstA;
+        ctx.beginPath();
+        ctx.arc(ball.sx, ball.sy, burstR * 1.05, 0, Math.PI * 2);
+        ctx.stroke();
       }
 
       ctx.restore();
@@ -1488,11 +1657,24 @@
     const { sx, sy } = worldToScreen(rec.x, rec.y, tilePx);
     const cx = sx + tilePx / 2;
     const cy = sy + tilePx / 2;
-    // Use walk sheet only when the avatar is actually moving toward its
-    // target — covers both server-issued anim flag and visible drift.
-    const moving = rec.anim === "walk" ||
-                   Math.hypot(rec.tx - rec.x, rec.ty - rec.y) > 0.05;
-    const sprite = getSpriteForPlayer(rec, moving ? "walk" : "idle");
+    // Cast trumps walk trumps idle: if we recently fired a spell (or the
+    // server told us this player is casting), swap to the no-weapon CAST
+    // sheet snapped to the cardinal we resolved at cast time.  Otherwise
+    // walk vs idle by movement.
+    const castEntry = isCasting(rec.id);
+    let animKey;
+    if (castEntry) {
+      // Force the recorded cast facing onto the render record so the
+      // direction-specific cast sheet is selected (rec.facing is the
+      // server-authoritative facing, which may have already moved).
+      rec.facing = castEntry.facing || rec.facing;
+      animKey = "cast";
+    } else if (rec.anim === "walk" || Math.hypot(rec.tx - rec.x, rec.ty - rec.y) > 0.05) {
+      animKey = "walk";
+    } else {
+      animKey = "idle";
+    }
+    const sprite = getSpriteForPlayer(rec, animKey);
     if (sprite) {
       drawSpriteAvatar(sprite, rec, cx, cy, tilePx);
     } else {
@@ -1723,29 +1905,73 @@
     try { state.ws.send(JSON.stringify({ type: "input", ...inp })); } catch {}
   }
 
-  // Slot-1 attack — fires whatever weapon the vessel is wearing. The
-  // server is the sole authority on cooldown / stamina / damage; we just
-  // send the intent and let it answer with {swing}/{hit}/{attack_denied}.
+  // Basic attack — fires the racial weapon (or bare hands) in the
+  // direction the player is facing right now.  Used when a hotkey was
+  // pressed without a target in mind; sendAttackToCursor() is preferred
+  // for click-driven swings.  The server is the sole authority on
+  // cooldown / stamina / damage; we just send intent.
   function sendAttack() {
     if (!state.wsReady || !state.me) return;
     const facing = state.me.facing || "down";
     try { state.ws.send(JSON.stringify({ type: "attack", facing })); } catch {}
   }
+  // Click-driven basic attack: snap the avatar's facing to the nearest
+  // cardinal of the cursor vector, then fire.  This is what makes the
+  // weapon feel mouse-driven (and matches how spell casting works).
+  function sendAttackToCursor() {
+    if (!state.wsReady || !state.me) return;
+    const { facing } = aimFromCursor();
+    state.me.facing = facing;
+    try { state.ws.send(JSON.stringify({ type: "attack", facing })); } catch {}
+  }
 
-  // Equip / unequip a slot-2 spell (Mana Bolt today; user-defined spells
-  // later via the wizard).  Pressing the hotkey again with the same spell
-  // already equipped puts the hand back down.  No casting occurs here —
-  // see mousedown/mouseup above for that.
+  // Equip / unequip a hotbar spell (Mana Bolt today; user-defined spells
+  // later via the wizard).  Pressing the same hotkey twice puts the hand
+  // back down.  Equipping a spell automatically un-equips the basic
+  // attack so the [data-equipped] highlight always tracks one slot.
+  // No casting occurs here — see mousedown/mouseup above for that.
+  function paintEquipHighlight() {
+    document.querySelectorAll(".hb-slot[data-equipped]")
+      .forEach((b) => b.removeAttribute("data-equipped"));
+    if (state.equippedSpell) {
+      const btn = document.querySelector(`.hb-slot[data-spell="${state.equippedSpell}"]`)
+               || document.querySelector(`.sw-slot[data-spell="${state.equippedSpell}"]`);
+      if (btn) btn.setAttribute("data-equipped", "true");
+    } else {
+      // Basic attack — slot 1 is always considered "in hand" when no
+      // spell is equipped; light it gold so the player knows clicking
+      // will swing the weapon.
+      const slot1 = document.querySelector('.hb-slot[data-slot="1"]');
+      if (slot1) slot1.setAttribute("data-equipped", "true");
+    }
+  }
+  const SPELL_LABELS = {
+    mana_bolt: "Mana Bolt",
+  };
+  function spellLabel(id) { return SPELL_LABELS[id] || (id || "Spell"); }
   function toggleEquipSpell(spell) {
     if (state.equippedSpell === spell) {
       state.equippedSpell = "";
-      hbSlot2 && hbSlot2.removeAttribute("data-equipped");
-      chat(`Mana Bolt sheathed.`, "cmd");
+      paintEquipHighlight();
+      chat(`${spellLabel(spell)} sheathed — basic attack ready (click to swing).`, "cmd");
     } else {
       state.equippedSpell = spell;
-      hbSlot2 && hbSlot2.setAttribute("data-equipped", "true");
-      chat(`Mana Bolt drawn — left-click taps (20%), right-click charges to Output.`, "cmd");
+      paintEquipHighlight();
+      chat(`${spellLabel(spell)} drawn — left-click taps (20%), right-click charges to Output.`, "cmd");
     }
+    // Hide the wheel after binding so the world is visible again.
+    showSpellWheel(false);
+  }
+  function equipBasicAttack() {
+    if (!state.equippedSpell) {
+      // Already in basic-attack stance — just give a quiet confirmation.
+      paintEquipHighlight();
+      return;
+    }
+    const prev = state.equippedSpell;
+    state.equippedSpell = "";
+    paintEquipHighlight();
+    chat(`${spellLabel(prev)} sheathed — basic attack ready (click to swing).`, "cmd");
   }
 
   // Slot-2 cast.  The cursor gives a full 360° aim vector that we forward
@@ -1774,11 +2000,29 @@
     const output = (typeof outputOverride === "number")
       ? Math.max(0.05, Math.min(1, outputOverride))
       : Math.max(0.05, Math.min(1, (state.output || 100) / 100));
+    // Locally flag the caster as "casting" for ~360 ms so drawPlayer
+    // swaps to the no-weapon CAST sprite, snapped to the cardinal we
+    // just resolved.  The server doesn't need this — it's pure VFX.
+    if (state.me.id != null) markCasting(state.me.id, facing, 360);
     try {
       state.ws.send(JSON.stringify({
         type: "cast", spell, facing, output, aimX, aimY,
       }));
     } catch {}
+  }
+  // Track per-player cast-anim windows so the sprite snaps to the cast
+  // sheet for a brief beat after firing.  Keyed by player id; each entry
+  // is `{ until, facing }`.  Cleaned up lazily during render.
+  function markCasting(id, facing, ms) {
+    if (!state.fx.casting) state.fx.casting = new Map();
+    state.fx.casting.set(id, { until: performance.now() + (ms || 320), facing });
+  }
+  function isCasting(id) {
+    if (!state.fx.casting) return null;
+    const e = state.fx.casting.get(id);
+    if (!e) return null;
+    if (performance.now() > e.until) { state.fx.casting.delete(id); return null; }
+    return e;
   }
 
   let lastTickTime = 0;
@@ -2524,10 +2768,14 @@
         if (r && r.character) applyCharacterToHud(r.character);
       } catch (err) { /* HUD will stay at "—" until next attempt */ }
     }
+    // Mark the body so admin-only HUD bits (chat-hint, command catalog,
+    // editor toggles) are revealed via CSS for Architects only.
+    document.body.classList.toggle("is-architect", state.role === "admin");
     if (!state.booted) {
       state.booted = true;
-      chat("You drift into the void between stars.", "good");
-      chat("Press T to speak. Click the chat header to fold it away.", "cmd");
+      // Player welcome is intentionally silent — the design doc calls
+      // for an unscripted entry into the realm.  Architects still get
+      // their command-cheat reminder so they can find world-edit fast.
       if (state.role === "admin") {
         chat("Architect: type /command we, /command world_edit, or /command server_edit to weave the world.", "cmd");
       }
@@ -2557,6 +2805,150 @@
     window.dispatchEvent(new CustomEvent("freeform:leave-realm"));
   }
   leaveBtn.addEventListener("click", leave);
+
+  // ─────────────────────────────────────────────────────────────────
+  // Tiny in-chat toast — used for soft hints like "slot 3 is empty".
+  // We piggyback on the chat log so it doesn't compete for attention
+  // with the canvas; the message is styled like a system note.
+  // ─────────────────────────────────────────────────────────────────
+  function toast(msg) { try { chat(msg, "cmd"); } catch {} }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Spell Wheel — populate the 15 deeper-shelf slots once on boot,
+  // then show/hide on F-hold or wheel-button click.  Slots are blank
+  // until bound via the Spellbook; clicking a bound slot equips that
+  // spell (which closes the wheel automatically).
+  // ─────────────────────────────────────────────────────────────────
+  const wheelEl   = document.getElementById("spell-wheel");
+  const wheelRing = document.getElementById("sw-ring");
+  const wheelBtn  = document.getElementById("hb-wheel-btn");
+  function buildSpellWheel() {
+    if (!wheelRing) return;
+    // Clear any old slots (keeps the .sw-hub child intact).
+    [...wheelRing.querySelectorAll(".sw-slot")].forEach((n) => n.remove());
+    const N = 15;
+    const radius = 180;          // px from ring center
+    for (let i = 0; i < N; i++) {
+      // Distribute slots starting at the top (-90°) clockwise.
+      const ang = -Math.PI / 2 + (i / N) * Math.PI * 2;
+      const x = 50 + (Math.cos(ang) * radius / 460) * 100;
+      const y = 50 + (Math.sin(ang) * radius / 460) * 100;
+      const slot = document.createElement("button");
+      slot.type = "button";
+      slot.className = "sw-slot is-locked";
+      slot.dataset.wheelIndex = String(i);
+      slot.style.left = `${x}%`;
+      slot.style.top  = `${y}%`;
+      slot.innerHTML = `
+        <span class="sw-num">${7 + i}</span>
+        <span class="sw-icon">⛧</span>
+        <span class="sw-name">Empty</span>
+      `;
+      slot.addEventListener("click", () => {
+        toast(`Wheel slot ${7 + i} is empty — open the Spellbook to bind a spell here.`);
+      });
+      wheelRing.appendChild(slot);
+    }
+  }
+  let wheelOpen = false;
+  function showSpellWheel(on) {
+    if (!wheelEl) return;
+    wheelOpen = !!on;
+    wheelEl.hidden = !wheelOpen;
+    wheelEl.setAttribute("aria-hidden", String(!wheelOpen));
+    if (wheelBtn) wheelBtn.classList.toggle("is-open", wheelOpen);
+  }
+  if (wheelBtn) {
+    wheelBtn.addEventListener("click", () => showSpellWheel(!wheelOpen));
+  }
+  // Click on the dim veil (outside any slot) closes the wheel cleanly.
+  if (wheelEl) {
+    wheelEl.addEventListener("click", (e) => {
+      if (e.target.classList.contains("sw-veil")) showSpellWheel(false);
+    });
+  }
+  buildSpellWheel();
+
+  // ─────────────────────────────────────────────────────────────────
+  // Fellowship dropdown — guild & party menu hanging off the codex
+  // rail.  We just toggle visibility and route each item to a chat-
+  // hint placeholder until the underlying systems are wired.
+  // ─────────────────────────────────────────────────────────────────
+  const fellowBtn  = document.getElementById("fellow-btn");
+  const fellowMenu = document.getElementById("fellow-menu");
+  function setFellowOpen(open) {
+    if (!fellowMenu || !fellowBtn) return;
+    fellowMenu.hidden = !open;
+    fellowBtn.setAttribute("aria-expanded", String(!!open));
+  }
+  if (fellowBtn && fellowMenu) {
+    fellowBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setFellowOpen(fellowMenu.hidden);
+    });
+    // Click anywhere else (or press Escape) closes the dropdown.
+    document.addEventListener("click", (e) => {
+      if (!fellowMenu.hidden && !fellowMenu.contains(e.target) && e.target !== fellowBtn) {
+        setFellowOpen(false);
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !fellowMenu.hidden) setFellowOpen(false);
+    });
+    fellowMenu.querySelectorAll(".cdm-item").forEach((item) => {
+      item.addEventListener("click", () => {
+        const k = item.dataset.fellow;
+        const M = {
+          "guild-roster": "Guild roster — no guild affiliated yet. Found one to begin.",
+          "guild-create": "Found a Guild — the founding ritual is not yet scribed.",
+          "guild-leave":  "Leave Guild — you belong to none.",
+          "party-list":   "Party — you walk alone in this shard.",
+          "party-invite": "Invite to Party — point at a soul and try /party invite <name>.",
+          "party-leave":  "Leave Party — there's no party to leave.",
+        };
+        toast(M[k] || "Fellowship action not yet woven.");
+        setFellowOpen(false);
+      });
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // HUD plate — slide it horizontally so it sits in the empty middle
+  // between the chat panel (lower-left) and the codex rail (right).
+  // Recomputed on resize and after the chat panel collapses/expands.
+  // ─────────────────────────────────────────────────────────────────
+  const hudPlateEl = document.querySelector(".hud-plate");
+  function repositionHudPlate() {
+    if (!hudPlateEl || hudPlateEl.offsetParent === null) return;
+    const realmRect = realmEl.getBoundingClientRect();
+    const chatPanel = document.getElementById("realm-chat");
+    const codexRail = document.querySelector(".hud-codex");
+    const chatRight = chatPanel ? chatPanel.getBoundingClientRect().right : realmRect.left + 12;
+    const codexLeft = codexRail ? codexRail.getBoundingClientRect().left  : realmRect.right - 12;
+    // Center of the gap between the two rails.
+    const gapCenter = (chatRight + codexLeft) / 2;
+    // Express as a percentage of the realm so CSS keeps using
+    // translateX(-50%) and we only need to nudge `left`.
+    const pct = ((gapCenter - realmRect.left) / Math.max(1, realmRect.width)) * 100;
+    // Clamp so the plate never gets pushed off-screen on tiny widths.
+    const clamped = Math.max(20, Math.min(80, pct));
+    hudPlateEl.style.left = `${clamped}%`;
+  }
+  window.addEventListener("resize", repositionHudPlate);
+  window.addEventListener("freeform:enter-realm", () => {
+    requestAnimationFrame(repositionHudPlate);
+  });
+  // The chat panel collapses without firing a resize; observe the panel
+  // so the plate slides whenever the chat width actually changes.
+  if (typeof ResizeObserver !== "undefined") {
+    const chatPanel = document.getElementById("realm-chat");
+    const codexRail = document.querySelector(".hud-codex");
+    const ro = new ResizeObserver(() => repositionHudPlate());
+    if (chatPanel) ro.observe(chatPanel);
+    if (codexRail) ro.observe(codexRail);
+  }
+  // Initial paint so slot-1 (basic attack) reads as "in hand" by default.
+  paintEquipHighlight();
 
   // Best-effort goodbye when the tab closes — saves us a "ghost" player
   // hanging around until the server's tick notices the dead socket.

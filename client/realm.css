@@ -624,6 +624,9 @@
    ╚═══════════════════════════════════════════════════════════╝ */
 .hud-plate {
   position: absolute;
+  /* Default to centered; realm.js recomputes `left` after layout so the
+     plate sits in the middle of the gap between the chat panel (lower
+     left) and the codex rail (lower right) — never under either one. */
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
@@ -1781,3 +1784,228 @@
   0%,100% { box-shadow: 0 0 14px rgba(176,112,255,0.55), inset 0 0 12px rgba(176,112,255,0.35); }
   50%     { box-shadow: 0 0 22px rgba(176,112,255,0.9),  inset 0 0 16px rgba(176,112,255,0.55); }
 }
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║  HOTBAR — F-WHEEL BUTTON + RADIAL OVERLAY                 ║
+   ║  Tucks a "wheel" hotkey at the right end of the hotbar    ║
+   ║  and overlays a 15-slot radial fan when F is held.        ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.hb-wheel-btn {
+  /* Slightly wider so the WHEEL label fits without truncating; styled
+     like an active slot so it always reads as "press me to open more". */
+  width: 50px;
+  margin-left: 4px;
+  border-color: var(--gold-2, #d8b257);
+  background:
+    radial-gradient(circle at 50% 35%, rgba(176,112,255,0.18), transparent 70%),
+    linear-gradient(180deg, rgba(46,30,52,0.7), rgba(16,12,20,0.95));
+  box-shadow: inset 0 0 10px rgba(216,178,87,0.18), 0 0 12px rgba(216,178,87,0.3);
+}
+.hb-wheel-btn:hover {
+  border-color: var(--gold-1, #f6e4a3);
+  box-shadow: 0 0 16px rgba(246,228,163,0.55), inset 0 0 12px rgba(176,112,255,0.25);
+}
+.hb-wheel-btn .hb-icon { color: #e8d6ff; text-shadow: 0 0 10px rgba(176,112,255,0.7); }
+.hb-wheel-btn.is-open {
+  border-color: var(--gold-1, #f6e4a3);
+  box-shadow: 0 0 18px rgba(246,228,163,0.7), inset 0 0 14px rgba(176,112,255,0.35);
+}
+
+/* ── Radial spell wheel overlay ─────────────────────────────── */
+.spell-wheel {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;            /* let clicks fall through to slots */
+  animation: sw-fade-in 140ms ease-out both;
+}
+.spell-wheel[hidden] { display: none; }
+.sw-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 60% at 50% 50%, rgba(20, 16, 38, 0.45) 0%, rgba(2, 2, 6, 0.78) 75%);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+.sw-ring {
+  /* The ring itself is just a positioning stage; slots are absolutely
+     positioned children so we can fan them mathematically in JS. */
+  position: relative;
+  width: 460px;
+  height: 460px;
+  pointer-events: none;
+}
+.sw-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 70% 70% at 50% 35%, rgba(176,112,255,0.22), transparent 70%),
+    linear-gradient(180deg, #1c1410, #0a0806);
+  border: 1px solid var(--gold-deep);
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.18),
+    inset 0 0 24px rgba(0,0,0,0.7),
+    0 0 32px rgba(176,112,255,0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  text-align: center;
+  pointer-events: auto;
+  color: var(--ink-soft);
+}
+.sw-hub-glyph {
+  font-size: 2.2rem;
+  color: var(--gold-1);
+  text-shadow: 0 0 14px rgba(176,112,255,0.6), 0 0 6px rgba(246,228,163,0.5);
+  line-height: 1;
+}
+.sw-hub-title {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-1);
+}
+.sw-hub-sub {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+}
+.sw-hub-sub kbd {
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.6rem;
+  background: linear-gradient(180deg, #2a1f15, #110b08);
+  border: 1px solid var(--gold-deep);
+  padding: 0.05rem 0.32rem;
+  border-radius: 2px;
+  color: var(--gold-1);
+}
+.sw-slot {
+  /* Each radial slot — positioned by inline style (left/top) from JS so
+     we can compute the angle for each of the 15 entries dynamically. */
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin-left: -32px;
+  margin-top: -32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(46,30,52,0.85), rgba(16,12,20,0.97));
+  border: 1px solid var(--gold-deep);
+  border-radius: 4px;
+  color: var(--ink-soft);
+  font-family: var(--font-display, "Cinzel", serif);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.6), 0 0 8px rgba(0,0,0,0.55);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+}
+.sw-slot:hover {
+  border-color: var(--gold-1);
+  box-shadow: 0 0 14px rgba(246,228,163,0.5), inset 0 0 10px rgba(246,228,163,0.18);
+  transform: scale(1.05);
+}
+.sw-slot.is-locked {
+  background: linear-gradient(180deg, rgba(10,8,14,0.92), rgba(6,5,10,0.97));
+  cursor: not-allowed;
+  color: var(--ink-mute);
+}
+.sw-slot.is-locked:hover { border-color: var(--gold-deep); transform: none; box-shadow: inset 0 0 10px rgba(0,0,0,0.6); }
+.sw-slot .sw-num {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-mute);
+}
+.sw-slot .sw-icon {
+  font-size: 1.6rem;
+  color: var(--gold-1);
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(246,228,163,0.45);
+}
+.sw-slot.is-locked .sw-icon { color: rgba(255,255,255,0.18); text-shadow: none; }
+.sw-slot .sw-name {
+  margin-top: 2px;
+  font-size: 0.5rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+@keyframes sw-fade-in { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
+
+/* ╔═══════════════════════════════════════════════════════════╗
+   ║  CODEX — FELLOWSHIP DROPDOWN (Guild + Party menu)         ║
+   ╚═══════════════════════════════════════════════════════════╝ */
+.codex-drop { position: relative; }
+.codex-drop > .codex-btn { width: 100%; }
+.codex-drop-menu {
+  /* Menu drops to the LEFT of the codex rail since the rail itself
+     hugs the right edge of the realm — opening rightward would clip. */
+  position: absolute;
+  top: 0;
+  right: calc(100% + 8px);
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: linear-gradient(180deg, rgba(28,20,32,0.98), rgba(10,8,14,0.98));
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(246,228,163,0.1),
+    0 8px 28px rgba(0,0,0,0.6);
+  z-index: 7;
+  animation: cdm-pop 130ms ease-out both;
+}
+.codex-drop-menu[hidden] { display: none; }
+@keyframes cdm-pop {
+  from { opacity: 0; transform: translateX(6px); }
+  to   { opacity: 1; transform: translateX(0);   }
+}
+.cdm-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-display, "Cinzel", serif);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.cdm-item:hover {
+  color: var(--gold-1);
+  border-color: var(--gold-deep);
+  background: linear-gradient(180deg, rgba(46,30,52,0.55), rgba(16,12,20,0.55));
+}
+.cdm-divider {
+  display: block;
+  height: 1px;
+  margin: 4px 6px;
+  background: linear-gradient(90deg, transparent, var(--gold-3), transparent);
+}
+
+/* Hide the chat tutorial hint for non-admins. The realm.js sets
+   .is-architect on <body> when an admin enters the realm. */
+body:not(.is-architect) .chat-hint { display: none; }

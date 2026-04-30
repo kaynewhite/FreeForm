@@ -76,6 +76,10 @@ function parseFile(file, character, animation) {
   if (["Up", "Down", "Left", "Right"].includes(dirPart)) {
     return { file, weapon, direction: dirPart.toLowerCase(), combined: false };
   }
+  // Single non-directional sheet (e.g. OS Nica's hand-painted strips that
+  // were authored without a per-direction split).  We treat these the same
+  // way the sandbox treats death sheets — one card, no facing.
+  if (dirPart === "") return { file, weapon, direction: null, combined: false };
   return null;
 }
 

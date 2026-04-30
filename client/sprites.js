@@ -52,6 +52,7 @@
   const statusMsg = $("#status-msg");
   const rawZoom = $("#raw-zoom");
   const applyAllBtn = $("#apply-all-btn");
+  const mirrorBtn   = $("#mirror-btn");
 
   function setStatus(text, good = false) {
     statusMsg.textContent = text || "";
@@ -400,6 +401,56 @@
     setTimeout(() => setStatus(""), 2400);
   });
 
+  // ---- Mirror across facings ------------------------------------------
+  // For per-direction sheets, art is almost always symmetric: the Right
+  // strip is just a flipped Left strip, and the Up walk cycle uses the
+  // same crop as the Down walk cycle (the legs animate on the same Y).
+  // This button takes the active card's slice and stamps it onto the
+  // mirror direction (Right ↔ Left, Down ↔ Up) so the admin doesn't have
+  // to redial four cards by hand. Combined sheets and single-strip layouts
+  // (death, OS Nica) have nothing to mirror, so we no-op politely.
+  const MIRROR_PARTNER = { right: "left", left: "right", down: "up", up: "down" };
+  function mirrorActiveAcrossFacings() {
+    const src = previewCards[state.activeIndex];
+    if (!src || !src.sheet) {
+      setStatus("Pick a card first — there's nothing to mirror.");
+      setTimeout(() => setStatus(""), 1800);
+      return;
+    }
+    const partner = MIRROR_PARTNER[src.direction];
+    if (!partner) {
+      setStatus("This sheet has no mirror partner — only Up/Down/Left/Right cards mirror.");
+      setTimeout(() => setStatus(""), 2200);
+      return;
+    }
+    const dst = previewCards.find((c) => c.direction === partner && c.sheet);
+    if (!dst) {
+      setStatus(`No ${partner.toUpperCase()} sheet loaded yet — load one and try again.`);
+      setTimeout(() => setStatus(""), 2200);
+      return;
+    }
+    dst.frameW = src.frameW;
+    dst.frameH = src.frameH;
+    dst.offsetX = src.offsetX;
+    dst.offsetY = src.offsetY;
+    dst.gapX   = src.gapX;
+    dst.frames = src.frames;
+    dst.fps    = src.fps;
+    dst.scale  = src.scale;
+    dst.perFrame = !!src.perFrame;
+    dst.frameRects = src.perFrame
+      ? src.frameRects.map((r) => ({ ...r }))
+      : null;
+    dst.activeFrame = 0;
+    writeInputsFrom(dst);
+    sizePreviewCanvas(dst);
+    updateCardMeta(dst);
+    markDirty(dst);
+    setStatus(`Mirrored ${src.direction.toUpperCase()} → ${partner.toUpperCase()} — click Save changes to commit.`, true);
+    setTimeout(() => setStatus(""), 2400);
+  }
+  if (mirrorBtn) mirrorBtn.addEventListener("click", mirrorActiveAcrossFacings);
+
   function applyDefaultFrames() {
     framesInput.value = String(FRAME_DEFAULTS[state.animation] || 4);
     state.frames = parseInt(framesInput.value, 10);
@@ -437,6 +488,14 @@
       buildPerDirection([{ ...single, direction: "death" }], false);
       return;
     }
+    // Non-death single-sheet: characters like OS Nica that ship with one
+    // hand-painted strip per animation (no facing split). Render exactly
+    // one card, labelled "all", and let the admin slice it normally.
+    if (!combined && !perDir.length && single) {
+      layoutHint.textContent = `Single non-directional strip — 1 row × N frames (used for all facings).`;
+      buildPerDirection([{ ...single, direction: "all" }], false);
+      return;
+    }
     if (combined) {
       layoutHint.textContent = `Combined sheet — 4 rows × N frames, row order Up · Left · Down · Right.`;
       buildCombined(combined);
@@ -458,7 +517,11 @@
       : entries;
 
     for (const e of ordered) {
-      const card = makeCard(useDirNames ? e.direction : "death", e.url);
+      // For non-directional sheets we still want a meaningful label
+      // (death sheets read "DEATH"; OS Nica's hand-painted strips read
+      // "ALL" since they're shared across every facing).
+      const fallbackLabel = (e.direction === "all") ? "all" : "death";
+      const card = makeCard(useDirNames ? e.direction : fallbackLabel, e.url);
       const saved = lookupSaved(e.url);
       card.savedSlice = saved;
       previewGrid.appendChild(card.el);

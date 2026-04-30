@@ -308,6 +308,23 @@
         <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M7 3h7l4 4v14H7zM14 3v4h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12h7M9 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
         <span class="cb-key">J</span>
       </button>
+      <!-- Fellowship dropdown — opens to a small menu listing guild & party
+           commands. Markup-only here; the actual menu is wired in realm.js. -->
+      <div class="codex-drop" id="codex-fellow">
+        <button class="codex-btn" id="fellow-btn" type="button" title="Fellowship — Guild & Party" aria-haspopup="menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><circle cx="8" cy="9" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="9" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 20a5 5 0 0 1 10 0M11 20a5 5 0 0 1 10 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span class="cb-key">▾</span>
+        </button>
+        <div class="codex-drop-menu" id="fellow-menu" role="menu" hidden>
+          <button class="cdm-item" data-fellow="guild-roster" role="menuitem" type="button">Guild Roster</button>
+          <button class="cdm-item" data-fellow="guild-create" role="menuitem" type="button">Found a Guild…</button>
+          <button class="cdm-item" data-fellow="guild-leave"  role="menuitem" type="button">Leave Guild</button>
+          <span class="cdm-divider" aria-hidden="true"></span>
+          <button class="cdm-item" data-fellow="party-list"   role="menuitem" type="button">Party Members</button>
+          <button class="cdm-item" data-fellow="party-invite" role="menuitem" type="button">Invite to Party…</button>
+          <button class="cdm-item" data-fellow="party-leave"  role="menuitem" type="button">Leave Party</button>
+        </div>
+      </div>
       <button class="codex-btn" data-modal="map" type="button" title="Atlas (M)">
         <svg viewBox="0 0 24 24" width="22" height="22" class="cb-icon"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v16M15 6v16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         <span class="cb-key">M</span>
@@ -398,26 +415,30 @@
         </div>
       </div>
 
-      <!-- Hotbar: slot 1 holds the racial weapon; 2..0 reserved for spells -->
+      <!-- Hotbar: slot 1 = basic attack (weapon-driven, click to swing);
+           slots 2..6 = active spells (5 quick-pick); F-wheel slot opens
+           a radial overlay with 15 more spells (7..21).  Per design doc
+           §14.2/§18: hotkey only equips, never auto-fires. -->
       <div class="plate-hotbar" id="realm-hotbar">
-        <button class="hb-slot is-active" data-slot="1" type="button">
+        <button class="hb-slot is-active" data-slot="1" type="button" title="Basic attack — left-click to swing toward the cursor">
           <span class="hb-key">1</span>
           <span class="hb-icon" id="hb-weapon-icon">⚔</span>
           <span class="hb-name" id="hb-weapon-name">—</span>
         </button>
-        <button class="hb-slot is-active" data-slot="2" type="button" title="Mana Bolt — costs mana × output">
+        <button class="hb-slot is-active hb-spell" data-slot="2" data-spell="mana_bolt" type="button" title="Mana Bolt — left-click taps (20%), right-click charges to Output">
           <span class="hb-key">2</span>
           <span class="hb-icon">✦</span>
           <span class="hb-name">Bolt</span>
         </button>
-        <button class="hb-slot is-locked" data-slot="3" type="button" disabled><span class="hb-key">3</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="4" type="button" disabled><span class="hb-key">4</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="5" type="button" disabled><span class="hb-key">5</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="6" type="button" disabled><span class="hb-key">6</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="7" type="button" disabled><span class="hb-key">7</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="8" type="button" disabled><span class="hb-key">8</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="9" type="button" disabled><span class="hb-key">9</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot is-locked" data-slot="0" type="button" disabled><span class="hb-key">0</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked hb-spell" data-slot="3" type="button" disabled><span class="hb-key">3</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked hb-spell" data-slot="4" type="button" disabled><span class="hb-key">4</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked hb-spell" data-slot="5" type="button" disabled><span class="hb-key">5</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot is-locked hb-spell" data-slot="6" type="button" disabled><span class="hb-key">6</span><span class="hb-lock">⛧</span></button>
+        <button class="hb-slot hb-wheel-btn" id="hb-wheel-btn" type="button" title="Hold F to reveal 15 more spell slots in a radial wheel">
+          <span class="hb-key">F</span>
+          <span class="hb-icon">❂</span>
+          <span class="hb-name">Wheel</span>
+        </button>
       </div>
 
       <!-- Right wing: secondary stats -->
@@ -426,6 +447,25 @@
         <div class="ps-stat"><span class="ps-label">Ctrl</span><span class="ps-num" id="stats-ctrl">10</span></div>
         <div class="ps-stat"><span class="ps-label">Res</span><span class="ps-num" id="stats-res">0%</span></div>
         <div class="ps-stat"><span class="ps-label">Cast</span><span class="ps-num" id="stats-cast">1.0×</span></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- HOLD-F SPELL WHEEL — 15 deeper-shelf spells in a radial fan -->
+    <!--   Hidden by default; toggled visible while F is held (or the    -->
+    <!--   in-plate F-button is clicked). Renders 15 slots fanned in a   -->
+    <!--   ring around a central glyph that explains the binding rule.   -->
+    <!-- ============================================================ -->
+    <div class="spell-wheel" id="spell-wheel" hidden aria-hidden="true">
+      <div class="sw-veil"></div>
+      <div class="sw-ring" id="sw-ring">
+        <div class="sw-hub">
+          <span class="sw-hub-glyph">❂</span>
+          <span class="sw-hub-title">Spell Wheel</span>
+          <span class="sw-hub-sub">Hold <kbd>F</kbd> · click a slot to bind</span>
+        </div>
+        <!-- 15 slots — populated/styled by JS, but the markup is here so
+             the DOM is stable and we can position them in CSS. -->
       </div>
     </div>
 
@@ -681,153 +721,100 @@
           <button class="modal-x" data-modal-close type="button" title="Close (Esc)">×</button>
         </header>
         <div class="modal-body modal-body--help">
+          <!-- Tome of Lore — a player-facing encyclopedia. No Architect /
+               admin command listings live here; those belong in the Arch-
+               itect's private Codex (visible only to admins, elsewhere). -->
+
           <h3 class="sb-title">Movement &amp; sight</h3>
           <ul class="help-list">
             <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — walk · <kbd>Shift</kbd> — sprint</li>
-            <li>Mouse — face the cursor (4 cardinal directions)</li>
-            <li>Mouse wheel — channel <em>Output</em> (player) / zoom (editor)</li>
+            <li>Mouse — face the cursor (snaps to four cardinal facings)</li>
+            <li>Mouse wheel — channel <em>Output</em> (1–100%) for casting</li>
+            <li><kbd>Esc</kbd> — close any open panel · returns focus to the world</li>
           </ul>
 
-          <h3 class="sb-title">Spellcraft</h3>
+          <h3 class="sb-title">Combat &amp; spellcraft</h3>
           <ul class="help-list">
-            <li><kbd>2</kbd> — equip / unequip <strong>Mana Bolt</strong> (no auto-fire)</li>
-            <li>Wheel — set <em>Output %</em> (1–100); cost &amp; damage scale together</li>
-            <li>Left-click — instant tap-cast at fixed 20% Output</li>
-            <li>Right-click hold — charge to your current Output%; release to cast</li>
-            <li>Mana Bolt is a 360° lane traveling the violet/gold projectile to the cursor</li>
+            <li><kbd>1</kbd> — equip basic attack (your racial weapon, or bare hands)</li>
+            <li><kbd>2</kbd>–<kbd>6</kbd> — equip a quick-pick spell from the hotbar</li>
+            <li>Hold <kbd>F</kbd> — reveal the Spell Wheel (15 deeper-shelf spells)</li>
+            <li>Left-click — fire equipped spell at <em>20%</em> tap-cast (cheap, weak)</li>
+            <li>Right-click hold — charge to your current Output%, release to cast</li>
+            <li>With basic attack equipped, click swings toward the cursor</li>
           </ul>
 
           <h3 class="sb-title">Voice &amp; codices</h3>
           <ul class="help-list">
-            <li><kbd>T</kbd> — speak · <kbd>Enter</kbd> — send · <kbd>Esc</kbd> — close panels / leave chat</li>
-            <li><kbd>M</kbd> Atlas · <kbd>C</kbd> Vessel · <kbd>I</kbd> Satchel · <kbd>K</kbd> Spellbook · <kbd>J</kbd> Quests · <kbd>H</kbd> Tome</li>
+            <li><kbd>T</kbd> — speak · <kbd>Enter</kbd> — send · <kbd>Esc</kbd> — leave chat</li>
+            <li><kbd>C</kbd> Vessel · <kbd>I</kbd> Satchel · <kbd>K</kbd> Spellbook · <kbd>J</kbd> Quests</li>
+            <li><kbd>M</kbd> Atlas · <kbd>H</kbd> Tome (this codex)</li>
           </ul>
 
           <details class="help-section" open>
-            <summary class="help-summary">Architect commands — <em>full catalog (§27)</em></summary>
-
+            <summary class="help-summary">Encyclopedia of the Realm</summary>
             <div class="cmd-table">
-              <h4>27.1 · Editor &amp; world-edit</h4>
+
+              <h4>I · The Five Races</h4>
               <ul>
-                <li><code>/command we</code> · <code>/command world_edit</code> · <code>/command server_edit</code> — toggle live tile editor</li>
-                <li><code>/command palette</code> — open / close the tile palette</li>
-                <li><code>/command grid</code> — toggle editor grid overlay</li>
-                <li><code>/command coords</code> — toggle coordinate readout</li>
+                <li><strong>Human</strong> — balanced vessel; modest control, modest resistance, the most flexible class.</li>
+                <li><strong>Orc</strong> — high HP and stamina; brutal in melee, slow at the cast.</li>
+                <li><strong>Elf</strong> — high mana cap and cast speed; fragile and easily winded.</li>
+                <li><strong>Crystalline</strong> — high resistance; their bodies refract incoming damage at the cost of speed.</li>
+                <li><strong>Voidborn</strong> — innate efficiency; spells cost less mana, but their bodies are brittle.</li>
               </ul>
 
-              <h4>27.2 · Teleport &amp; vantage</h4>
+              <h4>II · Vitals</h4>
               <ul>
-                <li><code>/tp x y</code> — teleport to tile (x, y)</li>
-                <li><code>/tp here</code> — drop a marker at your feet</li>
-                <li><code>/tp origin</code> — return to the realm origin (0, 0)</li>
-                <li><code>/tp soul &lt;name&gt;</code> — warp to another player</li>
-                <li><code>/tp shard &lt;n&gt;</code> — jump to shard <em>n</em></li>
+                <li><strong>HP</strong> — life. Reaches zero and the vessel is spent; the realm is permadeath.</li>
+                <li><strong>Mana</strong> — fuel for spells. Regenerates slowly while you breathe.</li>
+                <li><strong>Stamina</strong> — drained by sprinting and basic attacks. Catch your breath if it runs dry.</li>
               </ul>
 
-              <h4>27.3 · Time &amp; weather</h4>
+              <h4>III · Output dial</h4>
               <ul>
-                <li><code>/time set day|night|dawn|dusk</code></li>
-                <li><code>/time scale &lt;n&gt;</code> — accelerate the world clock</li>
-                <li><code>/weather clear|rain|storm|aurora</code></li>
+                <li>Scroll the wheel to set Output between 1% and 100%.</li>
+                <li>Right-click hold charges to the dial; left-click is a fixed 20% tap.</li>
+                <li>Mana cost and damage both scale with Output — bigger bolts cost real mana.</li>
               </ul>
 
-              <h4>27.4 · Souls &amp; presence</h4>
+              <h4>IV · Spells (the eternal twenty-one)</h4>
               <ul>
-                <li><code>/souls</code> — list every soul on the shard</li>
-                <li><code>/whisper &lt;name&gt; &lt;msg&gt;</code> — private voice</li>
-                <li><code>/kick &lt;name&gt;</code> · <code>/ban &lt;name&gt;</code> · <code>/pardon &lt;name&gt;</code></li>
-                <li><code>/mute &lt;name&gt;</code> · <code>/unmute &lt;name&gt;</code></li>
+                <li><strong>Mana Bolt</strong> — violet/gold projectile. Reach 8, width 0.55, base 50 dmg @ 50 mana.</li>
+                <li>Quick-pick slots <kbd>2</kbd>–<kbd>6</kbd> hold five spells at the ready.</li>
+                <li>The Spell Wheel (hold <kbd>F</kbd>) reveals 15 more slots in a radial fan.</li>
+                <li>Empty slots are inscribed via the Spellbook — the Architect grants new spell forms.</li>
               </ul>
 
-              <h4>27.5 · Vessel &amp; vitals</h4>
+              <h4>V · Weapons of the realm</h4>
               <ul>
-                <li><code>/heal [name]</code> · <code>/refill [name]</code> — restore HP / MP / Stamina</li>
-                <li><code>/setlevel &lt;n&gt;</code> · <code>/setxp &lt;n&gt;</code></li>
-                <li><code>/sethp &lt;n&gt;</code> · <code>/setmp &lt;n&gt;</code> · <code>/setst &lt;n&gt;</code></li>
-                <li><code>/godmode on|off</code></li>
+                <li><strong>Free Hand</strong> — Architect's bare-fist channel; arc swing, no stamina cost.</li>
+                <li><strong>Dagger</strong> — short reach, fast cadence, low stamina drain.</li>
+                <li><strong>Club</strong> — wide arc, heavy thump, slow recovery.</li>
+                <li><strong>Bow</strong> — long reach single-shot; aim toward the cursor.</li>
+                <li><strong>Slingshot</strong> — quick low-damage projectile; cheap on stamina.</li>
+                <li><strong>Katana</strong> — sweeping arc, the highest base damage of the racial weapons.</li>
               </ul>
 
-              <h4>27.6 · Inventory &amp; gold</h4>
+              <h4>VI · Fellowship</h4>
               <ul>
-                <li><code>/give &lt;item&gt; [n]</code> · <code>/take &lt;item&gt; [n]</code></li>
-                <li><code>/gold &lt;n&gt;</code> — set carried gold</li>
-                <li><code>/clearbag</code> — empty the satchel</li>
+                <li><strong>Party</strong> — temporary bond between souls in the same shard. Open the Fellowship dropdown to invite.</li>
+                <li><strong>Guild</strong> — long-lived order with a shared roster, banner, and chat channel.</li>
+                <li>Use <code>/party &lt;text&gt;</code> or <code>/guild &lt;text&gt;</code> to speak in those private channels.</li>
               </ul>
 
-              <h4>27.7 · Spells &amp; channels</h4>
+              <h4>VII · Death &amp; the void</h4>
               <ul>
-                <li><code>/command create_spell</code> — open the 11-step spell wizard</li>
-                <li><code>/spell give &lt;id&gt; [name]</code> — grant a spell to a soul</li>
-                <li><code>/spell list</code> — list known spells</li>
-                <li><code>/spell forget &lt;id&gt;</code> — revoke a spell</li>
-                <li><code>/cast &lt;id&gt;</code> — force-cast for testing</li>
+                <li>The realm is permadeath. When HP reaches zero, the vessel is gone forever.</li>
+                <li>You'll be returned to the forge to weave a new soul. Names and deeds live on in the chronicle.</li>
               </ul>
 
-              <h4>27.8 · World shape &amp; tilesets</h4>
+              <h4>VIII · Etiquette of the shard</h4>
               <ul>
-                <li><code>/world resize &lt;w&gt; &lt;h&gt;</code></li>
-                <li><code>/world bounds show|hide</code></li>
-                <li><code>/tileset reload</code> · <code>/tileset list</code></li>
-                <li><code>/layer show|hide &lt;name&gt;</code></li>
+                <li>Speak kindly. The Architect watches.</li>
+                <li>Right-click never casts on a friend; targeting respects party &amp; guild bonds.</li>
+                <li>Whisper with <code>/whisper &lt;name&gt; &lt;msg&gt;</code> when the world is loud.</li>
               </ul>
 
-              <h4>27.9 · Shards &amp; persistence</h4>
-              <ul>
-                <li><code>/shard new &lt;name&gt;</code> · <code>/shard list</code></li>
-                <li><code>/shard publish</code> · <code>/shard unpublish</code></li>
-                <li><code>/save</code> — flush world to disk · <code>/snapshot &lt;tag&gt;</code></li>
-              </ul>
-
-              <h4>27.10 · NPCs &amp; mobs</h4>
-              <ul>
-                <li><code>/spawn &lt;npc&gt; [n]</code> · <code>/despawn &lt;npc|all&gt;</code></li>
-                <li><code>/npc list</code> · <code>/npc tame &lt;name&gt;</code></li>
-              </ul>
-
-              <h4>27.11 · Quests &amp; lore</h4>
-              <ul>
-                <li><code>/quest start &lt;id&gt;</code> · <code>/quest finish &lt;id&gt;</code></li>
-                <li><code>/quest list</code> · <code>/quest reset &lt;id&gt;</code></li>
-              </ul>
-
-              <h4>27.12 · Voice channels</h4>
-              <ul>
-                <li><code>/say</code> (default) · <code>/yell</code> · <code>/party</code> · <code>/global</code></li>
-                <li><code>/me &lt;action&gt;</code> — emote in the third person</li>
-              </ul>
-
-              <h4>27.13 · Camera &amp; render</h4>
-              <ul>
-                <li><code>/cam zoom &lt;n&gt;</code> · <code>/cam vantage high|low</code></li>
-                <li><code>/cam shake &lt;n&gt;</code> · <code>/fps show|hide</code></li>
-              </ul>
-
-              <h4>27.14 · Audio</h4>
-              <ul>
-                <li><code>/mute ambient|music|sfx</code> · <code>/unmute …</code></li>
-                <li><code>/volume &lt;0-100&gt;</code></li>
-              </ul>
-
-              <h4>27.15 · Diagnostics</h4>
-              <ul>
-                <li><code>/ping</code> — round-trip latency</li>
-                <li><code>/whoami</code> · <code>/where</code> · <code>/uptime</code></li>
-                <li><code>/dump tiles|souls|spells</code></li>
-              </ul>
-
-              <h4>27.16 · Macros</h4>
-              <ul>
-                <li><code>/macro save &lt;name&gt; &lt;cmd…&gt;</code></li>
-                <li><code>/macro run &lt;name&gt;</code> · <code>/macro list</code> · <code>/macro forget &lt;name&gt;</code></li>
-              </ul>
-
-              <h4>27.17 · Session</h4>
-              <ul>
-                <li><code>/leave</code> — return to the character sheet</li>
-                <li><code>/logout</code> — sign out completely</li>
-                <li><code>/clear</code> — clear the chat log</li>
-                <li><code>/help</code> — open this Tome</li>
-              </ul>
             </div>
           </details>
         </div>

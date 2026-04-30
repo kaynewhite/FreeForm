@@ -94,6 +94,58 @@ Sprite-slice and tilemap data live on disk under `data/`, not in Postgres, so ad
   - **Death** — When HP ≤ 0, `slay()` broadcasts `slain{by, name}`, persists `died_at`, and (after a 1.5 s "YOU HAVE FALLEN" parchment veil) kicks the loser's socket with WS code 4001 so they're bounced back to the character forge per the existing permadeath flow.
   - **Spellbook modal** now lists Mana Bolt as available (other spells stay locked).
 
+## v27 polish (apr-2026)
+- **Sprite sandbox `Mirror across facings`** — toolbar button on `/sprites.html`
+  copies the active card's slice settings (frames/W/H/X/Y/G/perFrame/fps/scale)
+  to its opposing direction (Right↔Left, Down↔Up) for every weapon variant of
+  the active animation. Marks all touched cards dirty for the explicit Save.
+- **Single-sheet (non-directional) sprites** — `server/sprites.js` parser and
+  `client/sprites.js` rebuild now accept sheets that have no direction suffix
+  (e.g. `osnica-idle-spritesheet.png`). They surface in the manifest under the
+  `all` direction label. Used by characters that ship as one sheet per anim.
+- **Hotbar 1+5+F layout** — slot 1 is the basic-attack racial weapon (always
+  equipped on entry, paints purple pulse via `paintEquipHighlight`); slots 2-6
+  are the five spell quick-slots; the F-key opens a 15-slot radial
+  `#spell-wheel` overlay anchored to the plate. Empty wheel slots toast a
+  "bind from Spellbook" hint; bound spells will wire in once the Spellbook
+  redesign lands.
+- **Plate centering** — `repositionHudPlate()` (ResizeObserver on chat panel
+  and codex rail) keeps the bottom plate horizontally centered between the
+  Voices chat (left) and the codex rail (right) regardless of which is folded.
+- **Fellowship dropdown** — `#fellow-btn` on the codex rail toggles a
+  `#fellow-menu` listing Guild / Party / Friends entries; placeholder
+  modals open from each so the wiring matches the doc before the systems exist.
+- **Chat hint visibility** — `body:not(.is-architect) .chat-hint { display:none }`
+  hides the "T to speak" pill for non-admin players. The realm enter() sets
+  the `is-architect` class on `<body>` only when `state.role === "admin"`.
+- **Tutorial spam removed** — chat no longer auto-prints the welcome / tip
+  bundle; only the admin command-hint line is pushed (and only for admins).
+- **Tome modal as encyclopedia** — `#modal-help` is now an 8-section reference
+  (movement, combat, casting, world tools, social, vessel, philosophy, version
+  notes). All admin-only `/command …` cheatsheet content was excised so the
+  Tome reads as in-fiction lore for every player.
+- **Casting visuals** — `markCasting()` flips `state.castEntry[id]` for ~280 ms
+  after every cast; `getSpriteForPlayer` then prefers the cast spritesheet for
+  the snapped cardinal facing (`aimFacingFromCursor()`). Falls back to idle if
+  the cast sheet is missing so non-admin avatars don't disappear. Admin uses
+  per-direction sheets in `cast-spritesheets/no-weapon/`; OS Nica uses the
+  single-sheet `cast` art via the new `all`-direction parser.
+- **Improved combat VFX** —
+  - **Mana Bolt**: launch flash at the caster origin (first 18% of flight) +
+    layered violet/gold core with a comet trail; impact adds a brighter
+    multi-stop burst, an outward shock-ring, and a one-shot screen shake
+    whose amplitude scales with Output (`pushShake(2.4 + out × 7.5, 220 ms)`).
+  - **Basic attack**: arc is drawn as a wide soft halo behind a bright thin
+    stroke; six seeded sparks fan out along the swing tip and decay with the
+    arc.  Reads as a real blade glint instead of a flat curve.
+  - **Charge aura**: while right-mouse is held with a spell equipped,
+    `drawChargeAura()` paints a violet/blue ground glow under the caster plus
+    six orbiting gold sparks; brightness scales with Output.
+- **Screen shake plumbing** — `consumeShake / pushShake / tickShake` and
+  `state.fx.shake = {x,y,amp,until}`; `render()` now wraps in
+  `ctx.save()` + `translate(shake.x, shake.y)` and ends with
+  `ctx.restore() + tickShake()`.
+
 ## Recent overhaul (apr-2026)
 - **Casting flow per design doc §14/§18.** Hotkey `2` *equips* Mana Bolt — it
   no longer auto-fires. Left-click is a fixed-output (20%) tap-cast; right-click
