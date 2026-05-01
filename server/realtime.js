@@ -28,7 +28,7 @@ const VALID_FACINGS = new Set(["up", "down", "left", "right"]);
 // ---- combat / vitals tuning -----------------------------------------
 // All "per second" values; tick loop scales by dt.
 const STAMINA_DRAIN_PER_SEC = 15;     // sprint cost while actually moving
-const STAMINA_REGEN_PER_SEC = 8;      // regen while not sprinting
+const STAMINA_REGEN_PER_SEC = 10;     // regen while not sprinting (§5.1)
 const MANA_REGEN_PER_SEC    = 4;      // base, scaled by efficiency
 const HP_REGEN_PER_SEC      = 3;      // base, gated by out-of-combat window
 const COMBAT_LOCKOUT_MS     = 5000;   // no HP regen until N ms after last hit
@@ -39,25 +39,9 @@ const FACING_VEC = {
   left:  { x: -1, y:  0 },
   right: { x:  1, y:  0 },
 };
-// Per-weapon: base damage, reach (tiles forward), arc (tiles half-width
-// perpendicular to facing), cooldown ms, stamina cost. The Architect's
-// "Free Hand" is a fast unarmed jab; Katana hits hardest but slowest.
-const WEAPON = {
-  "Free Hand":  { dmg:  6, reach: 1.1, arc: 0.7, cd: 450, st:  6 },
-  "Dagger":     { dmg:  9, reach: 1.2, arc: 0.7, cd: 480, st:  7 },
-  "Club":       { dmg: 13, reach: 1.4, arc: 0.9, cd: 700, st:  9 },
-  "Bow":        { dmg: 11, reach: 1.6, arc: 0.6, cd: 650, st:  9 },
-  "Slingshot":  { dmg:  8, reach: 1.5, arc: 0.6, cd: 540, st:  7 },
-  "Katana":     { dmg: 16, reach: 1.5, arc: 0.9, cd: 800, st: 11 },
-};
-// Race → racial weapon. Mirrors the same map the client uses for the hotbar.
-const RACE_WEAPON = {
-  Human: "Dagger",
-  Orc: "Club",
-  Elf: "Bow",
-  Crystalline: "Slingshot",
-  Voidborn: "Katana",
-};
+// NOTE: Weapons do not exist in Freeform Mana (§7.1 — all combat is
+// spell-only). The tryAttack / WEAPON / RACE_WEAPON code has been removed.
+// The cast pipeline below is the sole combat path.
 
 // Castable spells. Per design doc §14.1 spells have NO cooldowns; mana is
 // the only gate (terrain-altering spells in §14.3 are the exception).
@@ -68,6 +52,15 @@ const RACE_WEAPON = {
 // sendCast() — the server just trusts the facing the client sends and
 // snaps the player to it.
 const SPELL = {
+  mana_shield: {
+    name: "Mana Shield",
+    type: "shield",      // aura effect — not a projectile
+    cost: 100,           // §21.1 activation cost (× output × (1-eff))
+    cd:   0,
+    lv:   1,
+    // Shield HP formula per §21.3: 100 + (Output% × 10) × (ManaCap / 500)
+    // Computed at cast time using caster.manaCap and output.
+  },
   mana_bolt: {
     name: "Mana Bolt",
     cost: 50,            // BaseCost (multiplied by output and (1-eff))
@@ -213,8 +206,7 @@ class Player {
     this.mana     = this.manaCap;
     this.stamina  = this.staminaCap;
     // ── combat bookkeeping ───────────────────────────────────────
-    this.weapon       = isAdmin ? "Free Hand" : (RACE_WEAPON[character.race] || "Free Hand");
-    this.attackCdUntil = 0;          // timestamp ms before which next attack is rejected
+    this.attackCdUntil = 0;          // reserved for spell cast rate limits
     this.castCdUntil   = 0;          // same, but for castable spells
     this.lastDamageAt  = 0;          // ms since last hit taken (for HP regen lockout)
     this.dead          = false;
@@ -296,7 +288,6 @@ function init(server, sessionSecret) {
         mana: player.mana, manaMax: player.manaCap,
         st: player.stamina, stMax: player.staminaCap,
         level: player.level,
-        weapon: player.weapon,
         control: player.control, efficiency: player.efficiency,
         castSpeed: player.castSpeed, resistance: player.resistance,
       },
@@ -399,85 +390,13 @@ function init(server, sessionSecret) {
     }
   }
 
-  // ---- combat: melee swing resolution -------------------------------
-  // Pure server-authoritative. Reads weapon stats, checks cooldown +
-  // stamina, scans every other LIVING player in the shard, computes
-  // hit-test (front-facing rectangular arc), applies damage, persists
-  // HP, and broadcasts {swing} (everyone sees the slash) plus per-target
-  // {hit} (everyone learns the damage so the floating numbers + flash
-  // can render). Death triggers {slain} and tears the loser's socket.
-  function tryAttack(shard, attacker) {
-    if (attacker.dead) return;
-    const now = Date.now();
-    if (now < attacker.attackCdUntil) return;
-    const w = WEAPON[attacker.weapon] || WEAPON["Free Hand"];
-    if (attacker.stamina < w.st) {
-      // Soft refusal so the client can "thunk" the attempt without spam.
-      try { attacker.ws.send(JSON.stringify({ type: "attack_denied", reason: "stamina" })); } catch {}
-      return;
-    }
-    attacker.stamina -= w.st;
-    attacker.attackCdUntil = now + Math.max(ATTACK_GLOBAL_CD_MS, w.cd);
+  // ---- combat: spell resolution only (§7.1 — no weapons) -----------
+  // tryAttack is intentionally a no-op stub. Weapons do not exist in
+  // Freeform Mana. All damage flows through tryCast() below.
+  // The "attack" WS message type is still accepted (ignored) so old
+  // clients don't error on reconnect.
+  function tryAttack() { /* no-op — weapons removed per §7.1 */ }
 
-    // Damage formula: weapon base + 50% of control stat. (Future: weapon
-    // mastery, crits, race modifiers.) Round to whole hp points so the
-    // bars never tick by fractions a player can't read.
-    const dmg = Math.max(1, Math.round(w.dmg + (attacker.control || 0) * 0.5));
-
-    // Build the swing arc: a rectangle of length=reach forward of the
-    // attacker, width=2*arc perpendicular. Hit-test by transforming each
-    // candidate's offset into attacker-local (forward, side) coords.
-    const fv = FACING_VEC[attacker.facing] || FACING_VEC.down;
-    // perpendicular to facing
-    const px = -fv.y, py = fv.x;
-    const hits = [];
-    for (const target of shard.players.values()) {
-      if (target === attacker || target.dead) continue;
-      const ox = target.x - attacker.x;
-      const oy = target.y - attacker.y;
-      const forward = ox * fv.x + oy * fv.y;          // tiles in front
-      const side    = Math.abs(ox * px + oy * py);    // perpendicular distance
-      if (forward < -0.2 || forward > w.reach) continue;
-      if (side > w.arc) continue;
-      // Resistance softens damage by up to ~30% (resistance 100 → 0.7×).
-      const taken = Math.max(1, Math.round(dmg * (1 - Math.min(0.5, (target.resistance || 0) / 200))));
-      target.hp = Math.max(0, target.hp - taken);
-      target.lastDamageAt = now;
-      hits.push({ target, dmg: taken });
-    }
-
-    // Always broadcast the swing visual so onlookers see the motion even
-    // if the swing whiffs. `t` lets the client time the slash arc.
-    shard.broadcast({
-      type: "swing",
-      id: attacker.id,
-      facing: attacker.facing,
-      reach: w.reach,
-      arc: w.arc,
-      weapon: attacker.weapon,
-      t: now,
-    });
-
-    for (const { target, dmg: taken } of hits) {
-      shard.broadcast({
-        type: "hit",
-        id: target.id,
-        from: attacker.id,
-        dmg: taken,
-        hp: Math.round(target.hp),
-        hpMax: target.maxHp,
-      });
-      // Persist the wound right away so disconnect mid-fight sticks.
-      saveHp(target.charId, target.hp).catch((err) =>
-        console.error("[realtime] saveHp failed", err)
-      );
-      target.lastSavedHp = target.hp;
-      target.lastHpSavedAt = now;
-      if (target.hp <= 0 && !target.dead) {
-        slay(shard, target, attacker);
-      }
-    }
-  }
 
   // ---- spells: instant straight-line ranged ------------------------
   // Same shape as melee but with a longer, narrower hit-box (a "lane"
@@ -504,6 +423,22 @@ function init(server, sessionSecret) {
     caster.mana -= cost;
     if (spell.cd > 0) {
       caster.castCdUntil = now + Math.max(150, Math.round(spell.cd / Math.max(0.5, caster.castSpeed || 1)));
+    }
+
+    // ── Shield spell branch (§21) ────────────────────────────────────
+    if (spell.type === "shield") {
+      const manaCap = Math.max(500, caster.manaCap || 500);
+      const outputPct = Math.round(output * 100);
+      const shieldHp = Math.round(100 + (outputPct * 10) * (manaCap / 500));
+      // Store shield on the caster so the tick can sustain-drain mana.
+      caster.shield = { hp: shieldHp, maxHp: shieldHp, output, activatedAt: now };
+      shard.broadcast({
+        type: "shield",
+        id: caster.id,
+        hp: shieldHp, maxHp: shieldHp,
+        output, t: now,
+      });
+      return;
     }
 
     // Per design doc §4.1 + §4.2 — diminishing-returns damage scaling.

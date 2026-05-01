@@ -202,7 +202,7 @@
         <div class="stat"><dt>Cast Speed</dt><dd id="stat-cast">—</dd></div>
         <div class="stat"><dt>Efficiency</dt><dd id="stat-eff">—</dd></div>
         <div class="stat"><dt>Resistance</dt><dd id="stat-res">—</dd></div>
-        <div class="stat"><dt>Weapon</dt><dd id="stat-weapon">—</dd></div>
+        <div class="stat"><dt>Class</dt><dd id="stat-class">—</dd></div>
       </div>
 
       <div class="char-actions">
@@ -415,17 +415,17 @@
         </div>
       </div>
 
-      <!-- Hotbar: slot 1 = basic attack (weapon-driven, click to swing);
-           slots 2..6 = active spells (5 quick-pick); F-wheel slot opens
-           a radial overlay with 15 more spells (7..21).  Per design doc
-           §14.2/§18: hotkey only equips, never auto-fires. -->
+      <!-- Hotbar: 6 spell slots (keys 1-6). No weapons exist in this game.
+           Left-click casts the equipped spell at Output%. F-wheel opens a
+           radial overlay for spells beyond slot 6. Slots unlock as spells
+           are learned from grimoires. Starter spells are pre-loaded. -->
       <div class="plate-hotbar" id="realm-hotbar">
-        <button class="hb-slot is-active" data-slot="1" type="button" title="Basic attack — left-click to swing toward the cursor">
+        <button class="hb-slot is-active hb-spell" data-slot="1" data-spell="mana_shield" type="button" title="Mana Shield — right-click to cycle modes; Output% sets size &amp; strength">
           <span class="hb-key">1</span>
-          <span class="hb-icon" id="hb-weapon-icon">⚔</span>
-          <span class="hb-name" id="hb-weapon-name">—</span>
+          <span class="hb-icon">🛡</span>
+          <span class="hb-name">Shield</span>
         </button>
-        <button class="hb-slot is-active hb-spell" data-slot="2" data-spell="mana_bolt" type="button" title="Mana Bolt — left-click taps (20%), right-click charges to Output">
+        <button class="hb-slot is-active hb-spell" data-slot="2" data-spell="mana_bolt" type="button" title="Mana Bolt — left-click to cast at Output%">
           <span class="hb-key">2</span>
           <span class="hb-icon">✦</span>
           <span class="hb-name">Bolt</span>
@@ -434,7 +434,7 @@
         <button class="hb-slot is-locked hb-spell" data-slot="4" type="button" disabled><span class="hb-key">4</span><span class="hb-lock">⛧</span></button>
         <button class="hb-slot is-locked hb-spell" data-slot="5" type="button" disabled><span class="hb-key">5</span><span class="hb-lock">⛧</span></button>
         <button class="hb-slot is-locked hb-spell" data-slot="6" type="button" disabled><span class="hb-key">6</span><span class="hb-lock">⛧</span></button>
-        <button class="hb-slot hb-wheel-btn" id="hb-wheel-btn" type="button" title="Hold F to reveal 15 more spell slots in a radial wheel">
+        <button class="hb-slot hb-wheel-btn" id="hb-wheel-btn" type="button" title="Hold F to open the spell wheel — all learned spells">
           <span class="hb-key">F</span>
           <span class="hb-icon">❂</span>
           <span class="hb-name">Wheel</span>
@@ -650,7 +650,7 @@
               <div class="cg-stat"><dt>Cast Speed</dt><dd id="char-modal-cast">—</dd></div>
               <div class="cg-stat"><dt>Efficiency</dt><dd id="char-modal-eff">—</dd></div>
               <div class="cg-stat"><dt>Resistance</dt><dd id="char-modal-res">—</dd></div>
-              <div class="cg-stat"><dt>Weapon</dt><dd id="char-modal-weapon">—</dd></div>
+              <div class="cg-stat"><dt>Class</dt><dd id="char-modal-class">—</dd></div>
             </div>
           </div>
         </div>

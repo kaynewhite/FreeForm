@@ -60,8 +60,6 @@
   const statsCtrl    = $("#stats-ctrl");
   const statsRes     = $("#stats-res");
 
-  const hbWeaponIcon = $("#hb-weapon-icon");
-  const hbWeaponName = $("#hb-weapon-name");
   const statsCast    = $("#stats-cast");
 
   // HUD portrait (in the bottom-center plate)
@@ -120,7 +118,7 @@
     cast:   $("#char-modal-cast"),
     eff:    $("#char-modal-eff"),
     res:    $("#char-modal-res"),
-    weapon: $("#char-modal-weapon"),
+    cls:    $("#char-modal-class"),
   };
 
   // Settings inputs (saved in localStorage so preferences persist)
@@ -146,17 +144,6 @@
       }
     }
   })();
-
-  // Per-race weapon glyph for the hotbar slot icon. Vague enough to work in
-  // any system font — real per-weapon art lands when we have spell sheets.
-  const WEAPON_ICON = {
-    Dagger: "†",
-    Club: "🜨",
-    Bow: ")",
-    Slingshot: "Y",
-    Katana: "⚔",
-    "Free Hand": "✦",
-  };
 
   const paletteEl   = $("#realm-palette");
   const paletteBody = $("#palette-body");
@@ -296,7 +283,6 @@
     if (!rec) {
       rec = {
         id: p.id, name: p.name, isAdmin: !!p.isAdmin, race: p.race,
-        weapon: p.weapon || null,
         x: p.x, y: p.y,            // visual (lerped) position
         tx: p.x, ty: p.y,           // authoritative target
         facing: p.facing || "down",
@@ -310,7 +296,6 @@
     rec.name = p.name ?? rec.name;
     rec.isAdmin = !!(p.isAdmin ?? rec.isAdmin);
     rec.race = p.race ?? rec.race;
-    rec.weapon = p.weapon ?? rec.weapon;
     rec.tx = p.x;
     rec.ty = p.y;
     rec.facing = p.facing || rec.facing;
@@ -624,25 +609,17 @@
     }
     if (isTypingInChat()) return;
     // ── Hotbar quick-pick ─────────────────────────────────────────────
-    // Per design doc §14.2/§18 hotkeys only EQUIP — they never auto-fire.
-    //   • [1]   = equip Basic Attack (the racial weapon).  Click the world
-    //             to swing it toward the cursor.
-    //   • [2-6] = equip the spell pinned to that quick-pick slot.
-    //   • [F]   = hold to reveal the 15-slot radial Spell Wheel.
+    // §19.1 — Keys 1-6 equip spell slots. F holds open the Spell Wheel.
+    // Hotkeys only EQUIP — they never auto-fire (casting = left/right click).
     // Editor mode is build-only, so all of these are politely ignored
     // while the tile palette is up.
     if (!state.editor.open) {
-      if (key === "1") {
-        e.preventDefault();
-        equipBasicAttack();
-        return;
-      }
-      if (key >= "2" && key <= "6") {
+      if (key >= "1" && key <= "6") {
         e.preventDefault();
         const slotBtn = document.querySelector(`.hb-slot[data-slot="${key}"]`);
         const spellId = slotBtn && slotBtn.dataset.spell;
         if (spellId) toggleEquipSpell(spellId);
-        else toast(`Slot ${key} is empty — open the Spellbook to bind a spell.`);
+        else toast(`Slot ${key} is empty — learn a spell from a grimoire to fill it.`);
         return;
       }
       if (key === "f" && !e.repeat) {
@@ -685,15 +662,12 @@
       paintAt(x, y, e.button === 2);
       return;
     }
-    // ---- combat: spell casting OR basic-attack swing -------------------
-    // Per design doc §14/§18, behavior depends on what's in the active
-    // hand (the [data-equipped] hotbar slot):
-    //   • Spell equipped (slots 2-6 / wheel):
-    //       Left  = TAP cast @ 20% Output (cheap & weak — for poking).
-    //       Right = HOLD to charge to your Output dial; release to fire.
-    //   • Basic attack equipped (slot 1, the default):
-    //       Left  = swing the racial weapon toward the cursor.
-    //       Right = no-op (preserved for future block/parry mechanics).
+    // ---- combat: spell casting (§19 — pure magic, no weapons) ----------
+    // The active slot is whichever hb-slot has [data-equipped]:
+    //   Left  = TAP cast @ 20% Output (quick, cheap poke).
+    //   Right = HOLD to charge; release fires at your current Output%.
+    // No spell equipped → clicks are silently ignored until a slot is
+    // selected (press 1-6 to equip from the hotbar).
     if (state.editor.open) return;
     if (state.equippedSpell) {
       if (e.button === 0) {
@@ -704,9 +678,6 @@
         state.charge.output = state.output;
         outputBox && outputBox.classList.add("is-charging");
       }
-    } else {
-      // Nothing equipped → basic attack on left-click toward cursor.
-      if (e.button === 0) sendAttackToCursor();
     }
   });
   window.addEventListener("mouseup", (e) => {
@@ -1680,6 +1651,24 @@
     } else {
       drawCirclePip(rec, cx, cy, tilePx, isSelf);
     }
+    // Mana Shield aura — a pulsing cyan ring that fades as shield HP drops.
+    if (rec.shield && rec.shield.until > performance.now()) {
+      const age = performance.now() - (rec.shield.until - 8000);
+      const hpFrac = Math.max(0, rec.shield.hp / (rec.shield.maxHp || 1));
+      const alpha  = Math.min(0.85, hpFrac * 0.85);
+      const r      = tilePx * (0.72 + 0.08 * Math.sin(age * 0.004));
+      const grad   = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r);
+      grad.addColorStop(0, `rgba(80,220,255,0)`);
+      grad.addColorStop(0.7, `rgba(80,220,255,${(alpha * 0.3).toFixed(2)})`);
+      grad.addColorStop(1, `rgba(120,240,255,${alpha.toFixed(2)})`);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(160,240,255,${(alpha * 0.9).toFixed(2)})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
     // Name plate — small enough to read as a banner OVER the player's
     // head (it used to drift well above the avatar and dominate the
     // canvas). 10 px Cinzel, 12 px tall pill, anchored ~1.7 tiles above
@@ -1905,31 +1894,9 @@
     try { state.ws.send(JSON.stringify({ type: "input", ...inp })); } catch {}
   }
 
-  // Basic attack — fires the racial weapon (or bare hands) in the
-  // direction the player is facing right now.  Used when a hotkey was
-  // pressed without a target in mind; sendAttackToCursor() is preferred
-  // for click-driven swings.  The server is the sole authority on
-  // cooldown / stamina / damage; we just send intent.
-  function sendAttack() {
-    if (!state.wsReady || !state.me) return;
-    const facing = state.me.facing || "down";
-    try { state.ws.send(JSON.stringify({ type: "attack", facing })); } catch {}
-  }
-  // Click-driven basic attack: snap the avatar's facing to the nearest
-  // cardinal of the cursor vector, then fire.  This is what makes the
-  // weapon feel mouse-driven (and matches how spell casting works).
-  function sendAttackToCursor() {
-    if (!state.wsReady || !state.me) return;
-    const { facing } = aimFromCursor();
-    state.me.facing = facing;
-    try { state.ws.send(JSON.stringify({ type: "attack", facing })); } catch {}
-  }
-
-  // Equip / unequip a hotbar spell (Mana Bolt today; user-defined spells
-  // later via the wizard).  Pressing the same hotkey twice puts the hand
-  // back down.  Equipping a spell automatically un-equips the basic
-  // attack so the [data-equipped] highlight always tracks one slot.
-  // No casting occurs here — see mousedown/mouseup above for that.
+  // Highlight whichever hotbar slot is currently equipped.
+  // No fallback to a "basic attack" slot — there is no basic attack in
+  // Freeform Mana (§7.1 — weapons do not exist).
   function paintEquipHighlight() {
     document.querySelectorAll(".hb-slot[data-equipped]")
       .forEach((b) => b.removeAttribute("data-equipped"));
@@ -1937,41 +1904,26 @@
       const btn = document.querySelector(`.hb-slot[data-spell="${state.equippedSpell}"]`)
                || document.querySelector(`.sw-slot[data-spell="${state.equippedSpell}"]`);
       if (btn) btn.setAttribute("data-equipped", "true");
-    } else {
-      // Basic attack — slot 1 is always considered "in hand" when no
-      // spell is equipped; light it gold so the player knows clicking
-      // will swing the weapon.
-      const slot1 = document.querySelector('.hb-slot[data-slot="1"]');
-      if (slot1) slot1.setAttribute("data-equipped", "true");
     }
   }
   const SPELL_LABELS = {
-    mana_bolt: "Mana Bolt",
+    mana_shield: "Mana Shield",
+    mana_bolt:   "Mana Bolt",
   };
   function spellLabel(id) { return SPELL_LABELS[id] || (id || "Spell"); }
+  // Equip / un-equip a hotbar spell. Pressing the same key twice lowers
+  // the hand. Casting is driven by mousedown/mouseup, not here.
   function toggleEquipSpell(spell) {
     if (state.equippedSpell === spell) {
       state.equippedSpell = "";
       paintEquipHighlight();
-      chat(`${spellLabel(spell)} sheathed — basic attack ready (click to swing).`, "cmd");
+      chat(`${spellLabel(spell)} lowered.`, "cmd");
     } else {
       state.equippedSpell = spell;
       paintEquipHighlight();
-      chat(`${spellLabel(spell)} drawn — left-click taps (20%), right-click charges to Output.`, "cmd");
+      chat(`${spellLabel(spell)} raised — left-click taps (20%), right-click charges to Output%.`, "cmd");
     }
-    // Hide the wheel after binding so the world is visible again.
     showSpellWheel(false);
-  }
-  function equipBasicAttack() {
-    if (!state.equippedSpell) {
-      // Already in basic-attack stance — just give a quiet confirmation.
-      paintEquipHighlight();
-      return;
-    }
-    const prev = state.equippedSpell;
-    state.equippedSpell = "";
-    paintEquipHighlight();
-    chat(`${spellLabel(prev)} sheathed — basic attack ready (click to swing).`, "cmd");
   }
 
   // Slot-2 cast.  The cursor gives a full 360° aim vector that we forward
@@ -2136,7 +2088,6 @@
           if (msg.you.hpMax)   state.character.max_hp      = msg.you.hpMax;
           if (msg.you.manaMax) state.character.mana_cap    = msg.you.manaMax;
           if (msg.you.stMax)   state.character.stamina_cap = msg.you.stMax;
-          if (msg.you.weapon)  state.character.starting_weapon = msg.you.weapon;
           state.cur.hp = msg.you.hp ?? state.cur.hp;
           state.cur.mp = msg.you.mana ?? state.cur.mp;
           state.cur.st = msg.you.st ?? state.cur.st;
@@ -2198,9 +2149,8 @@
         }
         break;
       case "swing": {
-        // Render a fading slash arc in front of the swinger. We snapshot
-        // the swinger's render position so the arc stays anchored even if
-        // they keep moving.
+        // Render a fading slash arc in front of the caster. Kept for
+        // future spell-hit VFX; weapon property removed (no weapons exist).
         const rec = state.renderPlayers.get(msg.id);
         if (rec) {
           state.fx.swings.push({
@@ -2210,7 +2160,6 @@
             reach: msg.reach || 1.2,
             arc: msg.arc || 0.7,
             t0: performance.now(),
-            weapon: msg.weapon,
           });
         }
         break;
@@ -2266,8 +2215,20 @@
         break;
       }
       case "cast_denied":
-        if (msg.reason === "mana") chat("Not enough mana for that bolt.", "err");
+        if (msg.reason === "mana") chat("Not enough mana.", "err");
         break;
+      case "shield": {
+        // A player's Mana Shield just activated. Record it on their render
+        // record so the draw loop can paint the glowing aura.
+        const rec = state.renderPlayers.get(msg.id);
+        if (rec) {
+          rec.shield = { hp: msg.hp, maxHp: msg.maxHp, until: performance.now() + 8000 };
+        }
+        if (state.me && msg.id === state.me.id) {
+          chat(`Mana Shield raised — ${msg.hp.toLocaleString()} HP.`, "cmd");
+        }
+        break;
+      }
       case "slain": {
         const isMe = state.me && msg.id === state.me.id;
         const byTxt = msg.by ? msg.by.name : "the realm";
@@ -2317,9 +2278,7 @@
     statsCtrl.textContent  = ch.control ?? 10;
     statsRes.textContent   = `${ch.resistance ?? 0}%`;
     if (statsCast) statsCast.textContent = `${(ch.cast_speed ?? 1).toFixed(1)}×`;
-    const weapon = ch.starting_weapon || (isAdmin ? "Free Hand" : "—");
-    hbWeaponName.textContent = weapon;
-    hbWeaponIcon.textContent = WEAPON_ICON[weapon] || "⚔";
+    const classLabel = isAdmin ? "Architect" : (ch.char_class || "—");
 
     // Mirror everything into the Vessel modal so opening it gives a full sheet.
     if (charModalRefs.name) {
@@ -2334,7 +2293,7 @@
       charModalRefs.cast.textContent  = `${(ch.cast_speed ?? 1).toFixed(2)}×`;
       charModalRefs.eff.textContent   = `${(ch.efficiency ?? 1).toFixed(2)}×`;
       charModalRefs.res.textContent   = `${ch.resistance ?? 0}%`;
-      charModalRefs.weapon.textContent= weapon;
+      if (charModalRefs.cls) charModalRefs.cls.textContent = classLabel;
     }
 
     refreshBars();
@@ -2947,7 +2906,7 @@
     if (chatPanel) ro.observe(chatPanel);
     if (codexRail) ro.observe(codexRail);
   }
-  // Initial paint so slot-1 (basic attack) reads as "in hand" by default.
+  // Initial equip highlight — no slot pre-selected (no basic attack exists).
   paintEquipHighlight();
 
   // Best-effort goodbye when the tab closes — saves us a "ghost" player
@@ -2973,7 +2932,7 @@
           mana_cap: 220, stamina_cap: 140,
           control: 18, resistance: 12,
           cast_speed: 1.25, efficiency: 1.10,
-          starting_weapon: "Free Hand",
+          char_class: "Architect",
         },
       }).catch(() => {});
     });

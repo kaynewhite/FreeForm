@@ -378,7 +378,7 @@
     $("#stat-cast").textContent    = String(c.cast_speed);
     $("#stat-eff").textContent     = `${c.efficiency}%`;
     $("#stat-res").textContent     = String(c.resistance);
-    $("#stat-weapon").textContent  = c.starting_weapon || "—";
+    $("#stat-class").textContent   = c.char_class || (c.race == null ? "Architect" : "—");
 
     const url = portraitUrlFor(c);
     if (url) startPortrait(url);

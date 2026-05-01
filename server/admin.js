@@ -22,10 +22,10 @@ const ADMIN_META = Object.freeze({
   label: "Admin",
   passive:
     "All spells learned. Immune to debuffs and Overcast penalties. " +
-    "Bypasses cooldowns. +8% movement speed. Stamina regen 200%. " +
+    "Bypasses cooldowns. +10% movement speed. Stamina regen 200%. " +
     "Cannot be killed by normal means.",
   stamina_regen_pct: 200,
-  movement_speed_pct: 8,
+  movement_speed_pct: 10,   // §3.9 — admin has +10% movement speed
 });
 
 function withAdminMeta(character) {
@@ -35,7 +35,6 @@ function withAdminMeta(character) {
     is_admin: true,
     race_name: ADMIN_META.label,
     racial_passive: ADMIN_META.passive,
-    starting_weapon: "All",
     stamina_regen_pct: ADMIN_META.stamina_regen_pct,
     movement_speed_pct: ADMIN_META.movement_speed_pct,
   };
