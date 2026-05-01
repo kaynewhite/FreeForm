@@ -10,6 +10,14 @@ working implementation. Core loop: movement, mana bolt combat, and mana shield a
 - `ws` for the realtime layer (20 Hz authoritative tick on `/ws/realm`)
 - Vanilla HTML/CSS/JS client (PixiJS will be added when world rendering starts)
 
+## Recent changes (UI polish + content fixes)
+- **Spellbook modal**: Added Mana Shield (slot 1) and Mana Detection (slot 3); updated flavor copy.
+- **Forge rules admin panel**: Removed weapon reference; now reads "every spell already woven, boundless mana, power to shape the world itself."
+- **Help modal / Tome of Lore**: Section IV now lists both Mana Shield and Mana Bolt. Section V rewritten as "Classes & mastery" — weapons section fully removed.
+- **Mana Shield hotbar indicator**: When shield activates, slot 1 gains `.shield-on` CSS class (pulsing cyan aura); auto-cleared after 8 s to match server sustain window.
+- **CSS polish — styles.css**: Account strip uses Display font (all-caps, spaced), subtle stripe rune texture overlay. Stats grid cells: gold `dd` text with glow, left accent border, hover brightening. Primary button: improved forge-fire shimmer angle and two-tone highlight layer. Ghost danger button improved.
+- **CSS polish — realm.css**: HP/MP/ST vbar tracks 1px taller (14px), colored fills have matching outer glow. Codex rail has inset top-gold-rim highlight + drop-shadow filter. Crown bar gets drop-shadow filter for depth. Hotbar equipped pulse (slot 2) is stronger; shield-on pulse (slot 1) added in cyan.
+
 ## UI strategy
 All UI is hand-coded HTML + CSS — **no UI asset packs, no UI frameworks**.
 Tome aesthetic: dark navy background, gold accents, Cinzel / Cormorant Garamond

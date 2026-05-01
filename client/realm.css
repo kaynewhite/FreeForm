@@ -88,6 +88,7 @@
   gap: 10px;
   z-index: 6;
   pointer-events: none;
+  filter: drop-shadow(0 2px 12px rgba(0,0,0,0.7));
 }
 .hud-crown > * { pointer-events: auto; }
 
@@ -307,11 +308,17 @@
   align-items: stretch;
   gap: 6px;
   padding: 8px 7px;
-  background: linear-gradient(180deg, rgba(28,20,32,0.95), rgba(10,8,14,0.95));
+  background:
+    linear-gradient(180deg, rgba(36,24,42,0.97), rgba(10,8,14,0.97));
   border: 1px solid var(--gold-deep);
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(246,228,163,0.06), 0 0 14px rgba(0,0,0,0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255,220,150,0.07),
+    inset 0 0 0 1px rgba(246,228,163,0.05),
+    0 0 18px rgba(0,0,0,0.65),
+    2px 0 12px rgba(0,0,0,0.4);
   z-index: 5;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,0.65));
 }
 .codex-btn {
   position: relative;
@@ -361,12 +368,12 @@
 .hud-chat {
   position: absolute;
   left: 12px;
-  /* Pinned to the bottom-left corner so it never tucks behind the HUD plate.
-     The plate is centered, so a left-edge chat at the same baseline shares
-     vertical space without overlap on any sane viewport. */
-  bottom: 12px;
+  /* Sits above the HUD plate. The plate is at bottom:10px, height:116px, so
+     this clears it by 16px of breathing room. max-height caps growth so the
+     panel never reaches the crown bar. */
+  bottom: calc(var(--hud-h) + 16px);
   width: min(340px, 26vw);
-  max-height: calc(var(--hud-h) + 32vh);
+  max-height: calc(100vh - var(--hud-h) - 80px);
   display: flex;
   flex-direction: column;
   background:
@@ -794,32 +801,41 @@
 .bar-st .vbar-icon { color: #ffe085; text-shadow: 0 0 6px rgba(255,224,133,0.55); }
 .vbar-track {
   position: relative;
-  height: 13px;
-  background: rgba(0,0,0,0.6);
+  height: 14px;
+  background: rgba(0,0,0,0.65);
   border: 1px solid var(--gold-deep);
   border-radius: 1px;
   overflow: hidden;
-  box-shadow: inset 0 0 6px rgba(0,0,0,0.55);
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .vbar-fill {
   position: relative;
   height: 100%;
   width: 100%;
-  transition: width 0.3s ease-out;
+  transition: width 0.28s ease-out;
   background: linear-gradient(180deg, #fff 0%, #ccc 100%);
-  box-shadow: inset 0 0 6px rgba(0,0,0,0.35);
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
 }
 .vbar-fill::after {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 45%;
-  background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0));
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.32), rgba(255,255,255,0));
   pointer-events: none;
 }
-.bar-hp .vbar-fill { background: linear-gradient(180deg, #ff8a7a 0%, #c0392b 60%, #7a1f15 100%); }
-.bar-mp .vbar-fill { background: linear-gradient(180deg, #cfe2ff 0%, #5b8cff 50%, #2c4faa 100%); }
-.bar-st .vbar-fill { background: linear-gradient(180deg, #ffe085 0%, #d8a73a 60%, #7a5a1f 100%); }
+.bar-hp .vbar-fill {
+  background: linear-gradient(180deg, #ff9f92 0%, #c0392b 55%, #7a1f15 100%);
+  box-shadow: 0 0 4px rgba(192,57,43,0.5), inset 0 0 4px rgba(0,0,0,0.35);
+}
+.bar-mp .vbar-fill {
+  background: linear-gradient(180deg, #d8eeff 0%, #5b8cff 48%, #2c4faa 100%);
+  box-shadow: 0 0 5px rgba(91,140,255,0.55), inset 0 0 4px rgba(0,0,0,0.3);
+}
+.bar-st .vbar-fill {
+  background: linear-gradient(180deg, #ffe899 0%, #d8a73a 58%, #7a5a1f 100%);
+  box-shadow: 0 0 4px rgba(216,167,58,0.45), inset 0 0 4px rgba(0,0,0,0.3);
+}
 .vbar-num { font-size: 0.72rem; color: var(--ink); white-space: nowrap; min-width: 4.4em; text-align: right; }
 
 /* ── plate · hotbar (center) ─────────────────────────────── */
@@ -1529,7 +1545,7 @@
   .plate-bars { flex: 0 0 200px; }
   .hb-slot { width: 46px; height: 46px; }
   .hb-slot .hb-icon { font-size: 1.4rem; }
-  .hud-chat { width: min(320px, 36vw); bottom: 12px; }
+  .hud-chat { width: min(320px, 30vw); bottom: calc(var(--hud-h) + 16px); max-height: calc(100vh - var(--hud-h) - 80px); }
   .hud-atlas { width: 180px; right: calc(var(--rail-w) + 22px); }
   .modal-body--map { grid-template-columns: 1fr; }
   .modal-body--char { grid-template-columns: 1fr; }
@@ -1770,19 +1786,44 @@
 }
 .spellwiz-foot .ghost--gold:hover { box-shadow: 0 0 18px rgba(246,228,163,0.7); }
 
-/* Hotbar slot 2 — "equipped" state when Mana Bolt is active. */
+/* Hotbar — "equipped" state (Mana Bolt, slot 2). */
 .hb-slot[data-equipped="true"] {
   border-color: #b070ff;
-  box-shadow: 0 0 14px rgba(176,112,255,0.7), inset 0 0 12px rgba(176,112,255,0.4);
+  box-shadow:
+    0 0 18px rgba(176,112,255,0.75),
+    inset 0 0 14px rgba(176,112,255,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.08);
   animation: hb-equipped-pulse 2.4s ease-in-out infinite;
 }
 .hb-slot[data-equipped="true"] .hb-icon {
   color: #ddc0ff;
-  text-shadow: 0 0 10px rgba(176,112,255,0.85);
+  text-shadow:
+    0 0 12px rgba(176,112,255,0.9),
+    0 0 24px rgba(176,112,255,0.45);
 }
 @keyframes hb-equipped-pulse {
   0%,100% { box-shadow: 0 0 14px rgba(176,112,255,0.55), inset 0 0 12px rgba(176,112,255,0.35); }
-  50%     { box-shadow: 0 0 22px rgba(176,112,255,0.9),  inset 0 0 16px rgba(176,112,255,0.55); }
+  50%     { box-shadow: 0 0 26px rgba(176,112,255,0.95), inset 0 0 18px rgba(176,112,255,0.6); }
+}
+
+/* Hotbar — Mana Shield "raised" state (cyan/teal aura). */
+.hb-slot.shield-on {
+  border-color: #40e0d0;
+  box-shadow:
+    0 0 18px rgba(64,224,208,0.75),
+    inset 0 0 14px rgba(64,224,208,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  animation: hb-shield-pulse 1.8s ease-in-out infinite;
+}
+.hb-slot.shield-on .hb-icon {
+  color: #b0fff8;
+  text-shadow:
+    0 0 10px rgba(64,224,208,0.9),
+    0 0 22px rgba(64,224,208,0.5);
+}
+@keyframes hb-shield-pulse {
+  0%,100% { box-shadow: 0 0 14px rgba(64,224,208,0.55), inset 0 0 12px rgba(64,224,208,0.32); }
+  50%     { box-shadow: 0 0 26px rgba(64,224,208,0.90), inset 0 0 18px rgba(64,224,208,0.55); }
 }
 
 /* ╔═══════════════════════════════════════════════════════════╗

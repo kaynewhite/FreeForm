@@ -2226,6 +2226,13 @@
         }
         if (state.me && msg.id === state.me.id) {
           chat(`Mana Shield raised — ${msg.hp.toLocaleString()} HP.`, "cmd");
+          // Light up slot 1 with cyan aura; auto-clear when shield expires.
+          const slot1 = document.querySelector('.hb-slot[data-spell="mana_shield"]');
+          if (slot1) {
+            slot1.classList.add("shield-on");
+            clearTimeout(slot1._shieldTimer);
+            slot1._shieldTimer = setTimeout(() => slot1.classList.remove("shield-on"), 8000);
+          }
         }
         break;
       }

@@ -325,6 +325,11 @@
       weaponSel.appendChild(o);
     }
     weaponSel.value = state.weapon;
+    // Sync back — if the stored weapon variant doesn't exist for this character
+    // (e.g. switching from admin "with-dagger" to osnica "no-weapon"), the
+    // select will fall back to the first option; we must reflect that in state
+    // or rebuild() will look for a variant that doesn't exist and show nothing.
+    state.weapon = weaponSel.value;
   }
 
   function syncFromControls() {

@@ -163,7 +163,7 @@
           <p><strong>Heed:</strong> race is rolled at the moment of forging — Human, Orc, Elf, Crystalline, or Voidborn, each at one chance in five. There are no rerolls. Your race is set until this vessel falls.</p>
         </div>
         <div class="forge-rules" id="forge-rules-admin" hidden>
-          <p><strong>Architect:</strong> you do not roll for race or pick a form. The Admin walks the realm as themselves — every spell already learned, every starting weapon to hand.</p>
+          <p><strong>Architect:</strong> you do not roll for race or pick a form. The Architect walks the realm as themselves — every spell already woven, boundless mana, and the power to shape the world itself.</p>
         </div>
       </form>
     </section>
@@ -683,12 +683,13 @@
         </header>
         <div class="modal-body">
           <ul class="spell-list">
-            <li class="sl-row"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Mana Bolt</strong><em>Straight-line bolt. Damage and mana cost both scale with channeled Output.</em></div><span class="sl-key">2</span></li>
-            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Ward of the Veil</strong><em>Brief absorbing barrier. Drains stamina to maintain.</em></div><span class="sl-key">3</span></li>
-            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Ember Step</strong><em>Short blink in facing direction. Cooldown.</em></div><span class="sl-key">4</span></li>
+            <li class="sl-row"><span class="sl-glyph">🛡</span><div class="sl-text"><strong>Mana Shield</strong><em>Raises a protective ward. Shield HP scales with Output% and ManaCap. Drains mana per second while held.</em></div><span class="sl-key">1</span></li>
+            <li class="sl-row"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Mana Bolt</strong><em>Straight-line violet bolt. Damage and mana cost both scale with channeled Output and ManaCap.</em></div><span class="sl-key">2</span></li>
+            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Mana Detection</strong><em>Pulse of arcane sight — reveals hidden life-force within range.</em></div><span class="sl-key">3</span></li>
+            <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Ember Step</strong><em>Short blink in facing direction.</em></div><span class="sl-key">4</span></li>
             <li class="sl-row sl-locked"><span class="sl-glyph">✦</span><div class="sl-text"><strong>Soulbind</strong><em>Tether two souls — share a fraction of damage taken.</em></div><span class="sl-key">5</span></li>
           </ul>
-          <p class="modal-flavor">Mana Bolt is the first weave — turn the Output dial low to conserve mana, high to commit.</p>
+          <p class="modal-flavor">Two spells are woven from the start — Shield to endure, Bolt to strike. Turn the Output dial to commit your mana.</p>
         </div>
       </div>
     </div>
@@ -735,12 +736,11 @@
 
           <h3 class="sb-title">Combat &amp; spellcraft</h3>
           <ul class="help-list">
-            <li><kbd>1</kbd> — equip basic attack (your racial weapon, or bare hands)</li>
-            <li><kbd>2</kbd>–<kbd>6</kbd> — equip a quick-pick spell from the hotbar</li>
+            <li><kbd>1</kbd> — Mana Shield (protective ward — cost scales with Output%)</li>
+            <li><kbd>2</kbd>–<kbd>6</kbd> — quick-pick spells from the hotbar</li>
             <li>Hold <kbd>F</kbd> — reveal the Spell Wheel (15 deeper-shelf spells)</li>
-            <li>Left-click — fire equipped spell at <em>20%</em> tap-cast (cheap, weak)</li>
+            <li>Left-click — cast equipped spell at <em>20%</em> Output (cheap, weak)</li>
             <li>Right-click hold — charge to your current Output%, release to cast</li>
-            <li>With basic attack equipped, click swings toward the cursor</li>
           </ul>
 
           <h3 class="sb-title">Voice &amp; codices</h3>
@@ -779,20 +779,19 @@
 
               <h4>IV · Spells (the eternal twenty-one)</h4>
               <ul>
-                <li><strong>Mana Bolt</strong> — violet/gold projectile. Reach 8, width 0.55, base 50 dmg @ 50 mana.</li>
-                <li>Quick-pick slots <kbd>2</kbd>–<kbd>6</kbd> hold five spells at the ready.</li>
+                <li><strong>Mana Shield</strong> — slot 1; raises a protective ward. HP = 100 + (Output% × 10) × (ManaCap ÷ 500). Drains mana per second while held.</li>
+                <li><strong>Mana Bolt</strong> — slot 2; straight-line violet bolt. Reach 8, width 0.55, base 50 dmg @ 50 mana, scales with Output% and ManaCap.</li>
+                <li>Quick-pick slots <kbd>1</kbd>–<kbd>6</kbd> hold six spells at the ready.</li>
                 <li>The Spell Wheel (hold <kbd>F</kbd>) reveals 15 more slots in a radial fan.</li>
-                <li>Empty slots are inscribed via the Spellbook — the Architect grants new spell forms.</li>
+                <li>Slots 3–6 unlock as spells are granted by the Architect from the grimoire.</li>
               </ul>
 
-              <h4>V · Weapons of the realm</h4>
+              <h4>V · Classes &amp; mastery</h4>
               <ul>
-                <li><strong>Free Hand</strong> — Architect's bare-fist channel; arc swing, no stamina cost.</li>
-                <li><strong>Dagger</strong> — short reach, fast cadence, low stamina drain.</li>
-                <li><strong>Club</strong> — wide arc, heavy thump, slow recovery.</li>
-                <li><strong>Bow</strong> — long reach single-shot; aim toward the cursor.</li>
-                <li><strong>Slingshot</strong> — quick low-damage projectile; cheap on stamina.</li>
-                <li><strong>Katana</strong> — sweeping arc, the highest base damage of the racial weapons.</li>
+                <li>Every vessel has a Class that defines how spells scale — granted by the Architect.</li>
+                <li>Efficiency reduces spell mana cost (capped at 75% for Arcanists).</li>
+                <li>Control governs the accuracy and breadth of placed spells.</li>
+                <li>Cast Speed multiplies casting cadence — at 2.0× you cast twice as fast.</li>
               </ul>
 
               <h4>VI · Fellowship</h4>
