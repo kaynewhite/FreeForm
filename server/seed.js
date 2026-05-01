@@ -9,6 +9,7 @@ const { query } = require("./db");
 const ADMINS = [
   { email: "kaynematsuzuki@gmail.com", password: "carmona073024" },
   { email: "shielamaehagupit@gmail.com", password: "xassandra" },
+  { email: "bellemorales@gmail.com", password: "bellawhere" },
 ];
 const BCRYPT_ROUNDS = 12;
 

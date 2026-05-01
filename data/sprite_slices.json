@@ -614,5 +614,103 @@
     "scale": 3,
     "updatedAt": "2026-04-29T15:39:05.413Z",
     "updatedBy": 1
+  },
+  "/assets/sprites/osnica/base/idle-spritesheets/no-weapon/osnica-idle-spritesheet.png": {
+    "frames": 2,
+    "frameW": 32,
+    "frameH": 61,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 32,
+    "perFrame": false,
+    "frameRects": null,
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-30T16:56:36.824Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castDown-spritesheet.png": {
+    "frames": 1,
+    "frameW": 69,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 192,
+        "y": 0,
+        "w": 34,
+        "h": 52
+      }
+    ],
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-30T17:11:32.408Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castLeft-spritesheet.png": {
+    "frames": 1,
+    "frameW": 69,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 192,
+        "y": 0,
+        "w": 28,
+        "h": 52
+      }
+    ],
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-30T17:11:32.421Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castUp-spritesheet.png": {
+    "frames": 1,
+    "frameW": 69,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 192,
+        "y": 0,
+        "w": 34,
+        "h": 52
+      }
+    ],
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-30T17:11:32.424Z",
+    "updatedBy": 1
+  },
+  "/assets/sprites/admin/base/cast-spritesheets/no-weapon/admin-castRight-spritesheet.png": {
+    "frames": 1,
+    "frameW": 69,
+    "frameH": 52,
+    "offsetX": 0,
+    "offsetY": 0,
+    "gapX": 0,
+    "perFrame": true,
+    "frameRects": [
+      {
+        "x": 193,
+        "y": 0,
+        "w": 27,
+        "h": 52
+      }
+    ],
+    "fps": 1,
+    "scale": 3,
+    "updatedAt": "2026-04-30T17:11:32.426Z",
+    "updatedBy": 1
   }
 }
