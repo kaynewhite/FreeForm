@@ -8,8 +8,10 @@ const { query } = require("./db");
 // rotate their own passwords without the seeder undoing the change on boot.
 const ADMINS = [
   { email: "kaynematsuzuki@gmail.com", password: "carmona073024" },
-  { email: "shielamaehagupit@gmail.com", password: "xassandra" },
-  { email: "bellemorales@gmail.com", password: "bellawhere" },
+  { email: "xiiveryxii@gmail.com", password: "xiboi" },
+  { email: "eltonjohn@gmail.com", password: "eltonjohn123" },
+  { email: "kennethfernandezrubis@gmail.com", password: "ken21" },
+  { email: "demonyongtao@gmail.com", password: "column123" },
 ];
 const BCRYPT_ROUNDS = 12;
 
