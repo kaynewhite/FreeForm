@@ -16,15 +16,14 @@
   <main class="sandbox-shell">
     <header class="sandbox-head">
       <a href="/" class="back-link">← Back to character</a>
-      <h1>Sprite Sandbox <span class="sub">— also</span></h1>
+      <h1>Sprite Sandbox</h1>
       <span class="role-badge is-admin">Admin Only</span>
     </header>
 
     <p class="sandbox-flavor">
-      Verify every uploaded admin sheet animates correctly. Pick a weapon
-      and an animation; tweak the frame count until each direction reads
-      cleanly. The frame count you settle on is what the in-world renderer
-      will use later.
+      Calibrate every spritesheet: pick a character, weapon variant, and animation — then
+      dial in frame count, size, and offset until each direction plays cleanly.
+      Saved settings are what the in-world renderer will use.
     </p>
 
     <section class="sandbox-controls tome">
@@ -84,6 +83,7 @@
             <span>Zoom</span>
             <input id="raw-zoom" type="range" min="1" max="8" step="1" value="2" />
           </label>
+          <button id="fit-zoom-btn" class="link-btn" type="button" title="Auto-fit zoom so the full sheet width fills the panel">Fit</button>
           <button id="apply-all-btn" class="link-btn" type="button">
             Apply slice to all directions
           </button>

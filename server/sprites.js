@@ -52,7 +52,7 @@ function anyAnimDirHasFiles(baseDir) {
       const variantDir = path.join(animDir, variant);
       if (!fs.statSync(variantDir).isDirectory()) continue;
       for (const f of fs.readdirSync(variantDir)) {
-        if (f.endsWith(".png")) return true;
+        if (/\.(png|jpe?g)$/i.test(f)) return true;
       }
     }
   }
@@ -62,7 +62,7 @@ function anyAnimDirHasFiles(baseDir) {
 // Filenames are "<character>[-<weapon>]-<animKey><Direction>-spritesheet.png".
 // e.g. "admin-walkUp-spritesheet.png", "admin-sword-attackDownLeftUpRight-spritesheet.png"
 function parseFile(file, character, animation) {
-  const stem = file.replace(/-spritesheet\.png$/, "");
+  const stem = file.replace(/-spritesheet\.(png|jpe?g)$/i, "");
   const parts = stem.split("-");
   if (parts[0] !== character) return null;
 
@@ -111,7 +111,7 @@ router.get("/manifest", (req, res) => {
       if (!fs.statSync(variantDir).isDirectory()) continue;
       const entries = [];
       for (const f of fs.readdirSync(variantDir)) {
-        if (!f.endsWith(".png")) continue;
+        if (!/\.(png|jpe?g)$/i.test(f)) continue;
         const parsed = parseFile(f, character, anim);
         if (!parsed) continue;
         entries.push({
