@@ -1,12 +1,17 @@
 const { Pool } = require("pg");
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
+const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("No database URL found — set NEON_DATABASE_URL or DATABASE_URL");
 }
 
+const isNeon = !!process.env.NEON_DATABASE_URL;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString,
   max: 10,
+  // Neon requires SSL; Replit's built-in Postgres does not
+  ssl: isNeon ? { rejectUnauthorized: false } : false,
 });
 
 pool.on("error", (err) => {
