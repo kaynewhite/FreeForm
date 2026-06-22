@@ -3,110 +3,255 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FreeForm · Sprite Sandbox</title>
+  <title>FreeForm · Sprite Editor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=MedievalSharp&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/sprites.css" />
 </head>
-<body class="sandbox-body">
-  <div class="bg-vignette"></div>
+<body class="editor-page">
+<div class="editor-shell">
 
-  <main class="sandbox-shell">
-    <header class="sandbox-head">
-      <a href="/" class="back-link">← Back to character</a>
-      <h1>Sprite Sandbox</h1>
-      <span class="role-badge is-admin">Admin Only</span>
+  <!-- ══════════════ LEFT SIDEBAR ══════════════ -->
+  <aside class="editor-sidebar">
+    <header class="sidebar-header">
+      <a href="/" class="back-link" title="Back to character">←</a>
+      <h1 class="sidebar-logo">Sprite Editor</h1>
+      <button id="save-all-btn" class="save-btn" type="button" disabled
+        title="Write every unsaved slice to disk (Ctrl/⌘-S)">
+        Save <span class="save-badge" id="save-count" hidden>0</span>
+      </button>
     </header>
 
-    <p class="sandbox-flavor">
-      Calibrate every spritesheet: pick a character, weapon variant, and animation — then
-      dial in frame count, size, and offset until each direction plays cleanly.
-      Saved settings are what the in-world renderer will use.
-    </p>
+    <div class="sidebar-scroll">
 
-    <section class="sandbox-controls tome">
-      <span class="corner tl"></span><span class="corner tr"></span>
-      <span class="corner bl"></span><span class="corner br"></span>
+      <!-- ── Character / Weapon / Animation ── -->
+      <section class="sidebar-section">
+        <div class="section-label">Sheet Selection</div>
+        <div class="field">
+          <label class="field-label">Character</label>
+          <select id="character-select" class="f-select"></select>
+        </div>
+        <div class="field">
+          <label class="field-label">Weapon variant</label>
+          <select id="weapon-select" class="f-select"></select>
+        </div>
+        <div class="field">
+          <label class="field-label">Animation</label>
+          <select id="anim-select" class="f-select"></select>
+        </div>
+      </section>
 
-      <div class="ctrl-row">
-        <label class="ctrl">
-          <span>Character</span>
-          <select id="character-select" title="Pick which character's sheets to calibrate."></select>
-        </label>
-        <label class="ctrl">
-          <span>Weapon</span>
-          <select id="weapon-select"></select>
-        </label>
-        <label class="ctrl">
-          <span>Animation</span>
-          <select id="anim-select"></select>
-        </label>
-        <label class="ctrl">
-          <span>Frames per direction</span>
-          <input id="frames-input" type="number" min="1" max="32" step="1" value="4" />
-        </label>
-        <label class="ctrl">
-          <span>FPS</span>
-          <input id="fps-input" type="number" min="1" max="60" step="1" value="8" />
-        </label>
-        <label class="ctrl">
-          <span>Scale</span>
-          <input id="scale-input" type="number" min="1" max="8" step="1" value="3" />
-        </label>
-        <label class="ctrl ctrl-toggle">
+      <!-- ── Animated Preview ── -->
+      <section class="sidebar-section">
+        <div class="section-label">Preview</div>
+        <div class="preview-wrap">
+          <canvas id="preview-canvas" width="128" height="128"></canvas>
+          <span class="preview-dir-badge" id="preview-dir-badge">—</span>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label">FPS</label>
+            <input id="fps-input" type="number" min="1" max="60" value="8" class="f-input" />
+          </div>
+          <div class="field">
+            <label class="field-label">Scale</label>
+            <input id="scale-input" type="number" min="1" max="8" value="3" class="f-input" />
+          </div>
+        </div>
+        <label class="f-checkbox">
           <input id="play-toggle" type="checkbox" checked />
-          <span>Playing</span>
+          Autoplay
         </label>
-        <button id="save-all-btn" class="save-btn" type="button" disabled
-          title="Write every unsaved slice to disk. Edits are kept in memory until you click this.">
-          <span class="save-label">Save changes</span>
-          <span class="save-count" id="save-count" hidden>0</span>
-        </button>
-      </div>
+      </section>
 
-      <p class="ctrl-hint" id="layout-hint">—</p>
-    </section>
-
-    <section class="preview-grid" id="preview-grid">
-      <!-- One card per direction, populated by JS -->
-    </section>
-
-    <section class="sheet-raw tome">
-      <span class="corner tl"></span><span class="corner tr"></span>
-      <span class="corner bl"></span><span class="corner br"></span>
-      <div class="raw-head">
-        <h2 class="card-title">Raw sheet · drag to crop the first frame</h2>
-        <div class="raw-tools">
-          <label class="ctrl">
-            <span>Zoom</span>
-            <input id="raw-zoom" type="range" min="1" max="8" step="1" value="2" />
-          </label>
-          <button id="fit-zoom-btn" class="link-btn" type="button" title="Auto-fit zoom so the full sheet width fills the panel">Fit</button>
-          <button id="apply-all-btn" class="link-btn" type="button">
-            Apply slice to all directions
-          </button>
-          <button id="mirror-btn" class="link-btn" type="button" title="Mirror the active card's slice across the four facings: Right ↔ Left flip, and Down → Up clone. Saves you a tedious manual pass when you've calibrated one direction perfectly.">
-            Mirror across facings
-          </button>
-          <button id="apply-other-char-btn" class="link-btn" type="button" title="Copy every saved slice from this character to another character's matching sheets.">
-            Apply settings to other character…
-          </button>
+      <!-- ── Layout Profile ── -->
+      <section class="sidebar-section">
+        <div class="section-label">Layout Profile</div>
+        <div class="field">
+          <select id="profile-select" class="f-select">
+            <option value="strip-h">Strip — Horizontal</option>
+            <option value="strip-v">Strip — Vertical</option>
+            <option value="grid">Grid Matrix (rows × cols)</option>
+            <option value="irregular">Irregular / Per-Frame</option>
+          </select>
         </div>
-      </div>
-      <p class="ctrl-hint" id="sheet-meta">—</p>
-      <div class="sheet-frame" id="sheet-frame">
-        <div class="sheet-stage" id="sheet-stage">
-          <img id="sheet-img" alt="" draggable="false" />
-          <canvas id="sheet-overlay"></canvas>
-        </div>
-      </div>
-    </section>
 
-    <p class="form-msg" id="status-msg"></p>
+        <!-- Strip params (H + V share most fields) -->
+        <div id="panel-strip" class="profile-panel is-active">
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Frames</label>
+              <input id="strip-n" type="number" min="1" max="128" value="4" class="f-input" />
+            </div>
+            <div class="field" id="strip-gap-wrap">
+              <label class="field-label">Gap (px)</label>
+              <input id="strip-gap" type="number" min="0" value="0" class="f-input" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Frame W</label>
+              <input id="strip-fw" type="number" min="1" value="64" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Frame H</label>
+              <input id="strip-fh" type="number" min="1" value="64" class="f-input" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Offset X</label>
+              <input id="strip-ox" type="number" min="0" value="0" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Offset Y</label>
+              <input id="strip-oy" type="number" min="0" value="0" class="f-input" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Grid params -->
+        <div id="panel-grid" class="profile-panel">
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Rows</label>
+              <input id="grid-rows" type="number" min="1" max="32" value="4" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Cols</label>
+              <input id="grid-cols" type="number" min="1" max="128" value="4" class="f-input" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Frame W</label>
+              <input id="grid-fw" type="number" min="1" value="64" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Frame H</label>
+              <input id="grid-fh" type="number" min="1" value="64" class="f-input" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Offset X</label>
+              <input id="grid-ox" type="number" min="0" value="0" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Offset Y</label>
+              <input id="grid-oy" type="number" min="0" value="0" class="f-input" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Gap X</label>
+              <input id="grid-gx" type="number" min="0" value="0" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Gap Y</label>
+              <input id="grid-gy" type="number" min="0" value="0" class="f-input" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Irregular / Per-Frame params -->
+        <div id="panel-irregular" class="profile-panel">
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Total frames</label>
+              <input id="irr-n" type="number" min="1" max="128" value="4" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Editing frame</label>
+              <select id="irr-frame" class="f-select"></select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">X</label>
+              <input id="irr-x" type="number" min="0" value="0" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">Y</label>
+              <input id="irr-y" type="number" min="0" value="0" class="f-input" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">W</label>
+              <input id="irr-w" type="number" min="1" value="64" class="f-input" />
+            </div>
+            <div class="field">
+              <label class="field-label">H</label>
+              <input id="irr-h" type="number" min="1" value="64" class="f-input" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Anchor / Pivot ── -->
+      <section class="sidebar-section">
+        <div class="section-label">Anchor Point <span class="section-hint">feet / pivot</span></div>
+        <p class="field-hint">Alt + drag on canvas to reposition anchor.</p>
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label">Anchor X <span class="field-dim">0–1</span></label>
+            <input id="anchor-x" type="number" min="0" max="1" step="0.01" value="0.5" class="f-input" />
+          </div>
+          <div class="field">
+            <label class="field-label">Anchor Y <span class="field-dim">0=top 1=bottom</span></label>
+            <input id="anchor-y" type="number" min="0" max="1" step="0.01" value="1" class="f-input" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Bulk Actions ── -->
+      <section class="sidebar-section">
+        <div class="section-label">Actions</div>
+        <button id="apply-all-btn"      class="action-btn">Apply slice to all directions</button>
+        <button id="mirror-btn"         class="action-btn">Mirror across facings (↔ / ↕)</button>
+        <button id="reset-btn"          class="action-btn danger">Reset this direction</button>
+        <button id="apply-other-char-btn" class="action-btn muted" style="margin-top:8px">Copy slices to other character…</button>
+        <p id="status-msg" class="status-msg"></p>
+      </section>
+
+    </div><!-- /sidebar-scroll -->
+  </aside>
+
+  <!-- ══════════════ MAIN CANVAS PANEL ══════════════ -->
+  <main class="editor-main">
+
+    <!-- Direction tabs + zoom controls -->
+    <div class="sheet-toolbar">
+      <div id="dir-tabs" class="dir-tabs"></div>
+      <div class="zoom-controls">
+        <span class="zoom-label">ZOOM</span>
+        <input id="zoom-slider" class="f-input zoom-range" type="range" min="0.1" max="10" step="0.05" value="1" />
+        <span id="zoom-display" class="zoom-val">1×</span>
+        <button id="fit-btn"  class="icon-btn" title="Fit image to viewport">⊡</button>
+        <button id="one-btn"  class="icon-btn" title="1× actual pixels">1:1</button>
+      </div>
+    </div>
+
+    <!-- Raw sheet viewport (canvas fills this) -->
+    <div id="sheet-viewport" class="sheet-viewport" tabindex="0">
+      <canvas id="sheet-canvas"></canvas>
+      <div id="empty-hint" class="empty-hint">
+        <span>No sheet loaded</span>
+        <small>Select a character, weapon, and animation above</small>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="sheet-statusbar">
+      <span id="sheet-meta" class="meta-text">—</span>
+      <span class="kb-hint">Drag crop · Scroll zoom · Space+drag pan · Alt+drag anchor · ↑↓←→ adjust · Shift×10</span>
+    </div>
+
   </main>
 
-  <script src="/sprites.js"></script>
+</div><!-- /editor-shell -->
+<script src="/sprites.js"></script>
 </body>
 </html>

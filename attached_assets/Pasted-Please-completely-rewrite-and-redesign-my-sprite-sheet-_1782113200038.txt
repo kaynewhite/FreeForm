@@ -1,0 +1,26 @@
+Please completely rewrite and redesign my sprite sheet calibration tool (`sprites.html`). The current version relies too heavily on manual numeric typing, forces rigid layouts, and lacks modern, responsive UX practices. 
+
+I want to overhaul both the interface design and the core slicing mechanics to make it adaptive, beautiful, and "production-ready."
+
+Here are the requirements for the overhaul:
+
+### 1. Modern & Responsive UI/UX Redesign
+* **Layout Structure:** Switch to a clean, multi-column dashboard layout. 
+    * Left/Top Panel: Configuration controls, dropdowns, inputs, and a real-time, looping animation preview player.
+    * Right/Main Panel: A massive, dedicated canvas area for the "Raw Sheet" viewport with built-in pan and smooth zoom (slider + mousewheel).
+* **Theme:** Keep a dark, sleek, gamer/developer aesthetic (deep slate/charcoal backgrounds, neon or crisp accent borders for active states, clean sans-serif typography). 
+* **Responsiveness:** Use Flexbox/CSS Grid so it looks great on varying monitor sizes. No overlapping text or squished fields.
+
+### 2. Adaptive Slicing Modes (The Core Fix)
+Replace the current rigid configuration with an explicit **"Layout Profile" Selector** dropdown:
+* **Grid Matrix Mode:** The user enters a Global Width & Height (e.g., 32x64) and the number of Rows (facings) and Columns (animation steps). The editor automatically maps out a perfect bounding grid over the whole sheet.
+* **Horizontal/Vertical Strip Mode:** Uses the starting X/Y, frame size, and a custom "Gap" (G) variable to auto-calculate linear sequences seamlessly.
+* **Irregular/Manual Mode:** Allows independent per-frame bounding box adjustments.
+
+### 3. Visual Interactive Slicing (No More Blind Guessing)
+* Integrate mouse/touch click-and-drag directly on the Raw Sheet canvas to instantly draw or resize the initial bounding box.
+* Once a bounding box is drawn or selected, let the user use the keyboard arrow keys for micro-adjustments (1px movements, or Shift+Arrow for 10px movements).
+
+### 4. Smart Alignment & Preview Tools
+* **Separate Anchor/Pivot Point:** Let users visually define an anchor point (like a crosshair for "feet alignment") inside the frame box so animations don't "jitter" or bounce when looping.
+* **Bulk Action Enhancements:** Ensure the "Apply Slice to All", "Mirror Across Facings", and "Per-Frame Editing" toggles work flawlessly with the new visual grid layout.
